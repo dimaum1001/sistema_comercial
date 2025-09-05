@@ -1,0 +1,72 @@
+import pandas as pd
+
+# --- Configuração dos Nomes de Arquivo e Planilha ---
+
+arquivo_entrada = 'C:\\Users\\dsilva\\Desktop\\Sankhya\\relatorio_dimas.xlsx'
+
+# Nome da planilha que contém os dados
+nome_da_planilha = '01-01 - Posicao dos Titulos a '
+
+# Nome do arquivo Excel de saída que será gerado
+arquivo_saida = 'relatorio_filtrado_com_cnpj_data_ajustada.xlsx'
+
+
+try:
+    # --- Leitura e Limpeza dos Dados ---
+
+    # Lê a planilha específica do arquivo Excel, pulando as 6 primeiras linhas.
+    df = pd.read_excel(arquivo_entrada, sheet_name=nome_da_planilha, skiprows=6, header=None)
+
+    # A primeira linha lida se torna o cabeçalho da tabela.
+    df.columns = df.iloc[0]
+    # Remove essa linha de cabeçalho dos dados e reajusta o índice.
+    df = df.iloc[1:].reset_index(drop=True)
+
+
+    # --- Filtragem por CNPJ ---
+
+    # Define o nome da coluna que contém o CNPJ/CPF (oitava coluna)
+    coluna_cnpj = 'CNPJ/CPF'
+
+    if coluna_cnpj in df.columns:
+        # Garante que a coluna de CNPJ seja tratada como texto
+        df[coluna_cnpj] = df[coluna_cnpj].astype(str)
+
+        # Filtra a tabela, mantendo apenas as linhas que contêm o caractere '/'
+        df_filtrado = df[df[coluna_cnpj].notna() & df[coluna_cnpj].str.contains('/')].copy()
+
+
+        # --- AJUSTE DAS COLUNAS DE DATA ---
+
+        # Lista das colunas de data que precisam ser formatadas
+        colunas_data = ['Data de Emissao', 'Vencto Titulo', 'Vencto Real']
+
+        for coluna in colunas_data:
+            if coluna in df_filtrado.columns:
+                # Converte a coluna para o formato de data, ignorando erros
+                df_filtrado[coluna] = pd.to_datetime(df_filtrado[coluna], errors='coerce')
+                # Formata a data para o padrão DD/MM/YYYY e substitui datas inválidas por vazio
+                df_filtrado[coluna] = df_filtrado[coluna].dt.strftime('%d/%m/%Y').fillna('')
+            else:
+                print(f"Aviso: A coluna de data '{coluna}' não foi encontrada para formatação.")
+
+
+        # --- Salvando o resultado ---
+
+        # Salva a tabela final em um novo arquivo Excel.
+        df_filtrado.to_excel(arquivo_saida, index=False)
+
+        print(f"Arquivo '{arquivo_saida}' criado com sucesso!")
+        print(f"Ele contém {len(df_filtrado)} linhas, com CNPJs e datas formatadas.")
+
+    else:
+        print(f"Erro: A coluna '{coluna_cnpj}' não foi encontrada na planilha '{nome_da_planilha}'.")
+
+except FileNotFoundError:
+    print(f"Erro: O arquivo '{arquivo_entrada}' não foi encontrado.")
+    print("Por favor, certifique-se de que o nome do arquivo está correto e que ele está na mesma pasta do script.")
+except ValueError as e:
+    print(f"Erro ao ler o arquivo: {e}")
+    print(f"Verifique se o nome da planilha ('{nome_da_planilha}') está correto no seu arquivo Excel.")
+except Exception as e:
+    print(f"Ocorreu um erro inesperado: {e}")
