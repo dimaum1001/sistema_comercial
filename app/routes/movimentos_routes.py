@@ -1,29 +1,29 @@
-# app/routes/movimentos_routes.py
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.db.database import get_db
 from app.models.models import MovimentoEstoque, Produto
 from app.schemas.movimento_schema import MovimentoCreate, MovimentoResponse
 from typing import List
-from sqlalchemy.orm import joinedload
+
 router = APIRouter()
+
 
 @router.post("/estoque/movimentar", response_model=MovimentoResponse)
 def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)):
     produto = db.query(Produto).filter(Produto.id == movimento.produto_id).first()
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
-    
+
     if movimento.quantidade <= 0:
         raise HTTPException(status_code=400, detail="Quantidade deve ser maior que zero")
-    
-    # Aplicar movimento no estoque do produto
+
+    # Aplica o movimento no estoque do produto
     if movimento.tipo == "entrada":
-        produto.estoque += movimento.quantidade
+        produto.estoque = (produto.estoque or 0) + movimento.quantidade
     elif movimento.tipo == "saida":
-        if produto.estoque < movimento.quantidade:
+        if (produto.estoque or 0) < movimento.quantidade:
             raise HTTPException(status_code=400, detail="Estoque insuficiente")
-        produto.estoque -= movimento.quantidade
+        produto.estoque = (produto.estoque or 0) - movimento.quantidade
     elif movimento.tipo == "ajuste":
         produto.estoque = movimento.quantidade
     else:
@@ -44,9 +44,16 @@ def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)
 
 @router.get("/estoque/movimentos", response_model=List[MovimentoResponse])
 def listar_movimentos(db: Session = Depends(get_db)):
+    """
+    Eager-load do produto e do fornecedor RELACIONADO.
+    IMPORTANTE: usar Produto.fornecedor_obj (relationship), NÃO Produto.fornecedor (coluna string).
+    """
     return (
         db.query(MovimentoEstoque)
-        .options(joinedload(MovimentoEstoque.produto).joinedload(Produto.fornecedor))
+        .options(
+            joinedload(MovimentoEstoque.produto)
+            .joinedload(Produto.fornecedor_obj)
+        )
         .order_by(MovimentoEstoque.data_movimento.desc())
         .all()
     )

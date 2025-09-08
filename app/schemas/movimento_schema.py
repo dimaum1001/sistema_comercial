@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
@@ -8,17 +8,17 @@ class FornecedorOut(BaseModel):
     id: UUID
     nome: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProdutoOutMovimento(BaseModel):
     id: UUID
     nome: str
-    fornecedor: Optional[FornecedorOut]  # 🔹 incluir fornecedor
+    # O modelo ORM tem relationship "fornecedor_obj".
+    # Vamos ler "fornecedor_obj" e SERIALIZAR como "fornecedor" no JSON.
+    fornecedor_obj: Optional[FornecedorOut] = Field(default=None, serialization_alias="fornecedor")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class MovimentoCreate(BaseModel):
@@ -34,7 +34,6 @@ class MovimentoResponse(BaseModel):
     quantidade: int
     data_movimento: datetime
     observacao: Optional[str] = None
-    produto: ProdutoOutMovimento  # 🔹 produto já vem com fornecedor
+    produto: ProdutoOutMovimento  # produto já vem com fornecedor (serializado como "fornecedor")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
