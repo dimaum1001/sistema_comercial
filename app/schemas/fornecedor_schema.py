@@ -1,13 +1,20 @@
-from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, AliasChoices, field_validator
 
-# Schema base (campos comuns)
 class FornecedorBase(BaseModel):
-    nome: str
-    cnpj_cpf: str  # obrigatório
-    inscricao_estadual: Optional[str] = None
+    # código interno numérico zero-padded (opcional na entrada)
+    codigo_fornecedor: Optional[str] = Field(default=None, alias="codigoFornecedor")
+
+    # nome pode vir como "nome" ou "razao_social"
+    nome: str = Field(validation_alias=AliasChoices("nome", "razao_social"))
+
+    # cnpj pode vir como "cnpj_cpf", "cnpjCpf" ou "cnpj"
+    cnpj_cpf: str = Field(validation_alias=AliasChoices("cnpj_cpf", "cnpjCpf", "cnpj"))
+
+    # inscrição pode vir como "inscricao_estadual" ou "inscricaoEstadual"
+    inscricao_estadual: Optional[str] = Field(default=None, alias="inscricaoEstadual")
 
     telefone: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -22,31 +29,67 @@ class FornecedorBase(BaseModel):
     cep: Optional[str] = None
     pais: Optional[str] = "Brasil"
 
-    contato_nome: Optional[str] = None
-    contato_cargo: Optional[str] = None
-    contato_email: Optional[EmailStr] = None
-    contato_telefone: Optional[str] = None
+    # contatos (camelCase aceito)
+    contato_nome: Optional[str] = Field(default=None, alias="contatoNome")
+    contato_cargo: Optional[str] = Field(default=None, alias="contatoCargo")
+    contato_email: Optional[EmailStr] = Field(default=None, alias="contatoEmail")
+    contato_telefone: Optional[str] = Field(default=None, alias="contatoTelefone")
 
-    # 🔹 Limpa máscara de CNPJ/CPF e telefone automaticamente
-    @validator("cnpj_cpf", "telefone", "contato_telefone", pre=True)
-    def clean_numbers(cls, v):
-        if v:
-            return "".join(filter(str.isdigit, str(v)))
-        return v
+    # aceitar aliases e ignorar campos extras (ex.: nome_fantasia, enderecos, etc.)
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-# Criar fornecedor
+    @field_validator("cnpj_cpf", "telefone", "contato_telefone", mode="before")
+    @classmethod
+    def _digits_only(cls, v):
+        if v is None:
+            return v
+        s = str(v)
+        return "".join(ch for ch in s if ch.isdigit())
+
+
 class FornecedorCreate(FornecedorBase):
     pass
 
-# Atualizar fornecedor
-class FornecedorUpdate(FornecedorBase):
-    pass
 
-# Saída (response)
+class FornecedorUpdate(BaseModel):
+    codigo_fornecedor: Optional[str] = Field(default=None, alias="codigoFornecedor")
+    nome: Optional[str] = Field(default=None, validation_alias=AliasChoices("nome", "razao_social"))
+    cnpj_cpf: Optional[str] = Field(default=None, validation_alias=AliasChoices("cnpj_cpf", "cnpjCpf", "cnpj"))
+    inscricao_estadual: Optional[str] = Field(default=None, alias="inscricaoEstadual")
+
+    telefone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    site: Optional[str] = None
+
+    logradouro: Optional[str] = None
+    numero: Optional[str] = None
+    complemento: Optional[str] = None
+    bairro: Optional[str] = None
+    cidade: Optional[str] = None
+    estado: Optional[str] = None
+    cep: Optional[str] = None
+    pais: Optional[str] = None
+
+    contato_nome: Optional[str] = Field(default=None, alias="contatoNome")
+    contato_cargo: Optional[str] = Field(default=None, alias="contatoCargo")
+    contato_email: Optional[EmailStr] = Field(default=None, alias="contatoEmail")
+    contato_telefone: Optional[str] = Field(default=None, alias="contatoTelefone")
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    @field_validator("cnpj_cpf", "telefone", "contato_telefone", mode="before")
+    @classmethod
+    def _digits_only_update(cls, v):
+        if v is None:
+            return v
+        s = str(v)
+        return "".join(ch for ch in s if ch.isdigit())
+
+
 class FornecedorOut(FornecedorBase):
     id: UUID
-    criado_em: Optional[datetime]
-    atualizado_em: Optional[datetime]
+    codigo_fornecedor: str
+    criado_em: Optional[datetime] = None
+    atualizado_em: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
