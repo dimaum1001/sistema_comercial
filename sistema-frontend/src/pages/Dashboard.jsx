@@ -1,16 +1,40 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState, lazy, Suspense } from 'react'
 import api from '../services/api'
+import {
+  FiDollarSign,
+  FiBox,
+  FiUsers,
+  FiShoppingCart,
+  FiPackage,
+  FiTruck
+} from 'react-icons/fi'
 
 // Componentes carregados lazy para melhor performance
 const StatsCard = lazy(() => import('../components/StatsCard'))
 const FeatureCard = lazy(() => import('../components/FeatureCard'))
 
+// Helpers de formatação
+const fmtBRL = (n) =>
+  Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0))
+
+const fmtInt = (n) => Intl.NumberFormat('pt-BR').format(Number(n || 0))
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [usuario, setUsuario] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [resumo, setResumo] = useState({ total_vendas: 0, total_produtos: 0, total_clientes: 0 })
+  const [resumo, setResumo] = useState({
+    total_vendas: 0,
+    total_produtos: 0,
+    total_clientes: 0,
+    txt_vendas: '',
+    txt_produtos: '',
+    txt_clientes: '',
+    perc_vendas: 0,
+    perc_produtos: 0,
+    perc_clientes: 0
+  })
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -19,19 +43,16 @@ export default function Dashboard() {
       return
     }
 
-    const fetchUsuario = async () => {
+    // garante Authorization nas próximas requisições
+    api.defaults.headers.common.Authorization = `Bearer ${token}`
+
+    const fetchUsuarioEResumo = async () => {
       try {
-        const response = await api.get('/auth/me', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        setUsuario(response.data)
+        const me = await api.get('/auth/me')
+        setUsuario(me.data)
 
-        // busca os dados reais do dashboard
-        const resumoResponse = await api.get('/dashboard/resumo', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        setResumo(resumoResponse.data)
-
+        const { data } = await api.get('/dashboard/resumo')
+        setResumo((prev) => ({ ...prev, ...(data || {}) }))
       } catch (error) {
         console.error('Erro ao buscar usuário ou resumo:', error)
         localStorage.removeItem('token')
@@ -41,7 +62,7 @@ export default function Dashboard() {
       }
     }
 
-    fetchUsuario()
+    fetchUsuarioEResumo()
   }, [navigate])
 
   if (loading) {
@@ -70,10 +91,7 @@ export default function Dashboard() {
         fallback={
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className="bg-white p-6 rounded-xl shadow-sm h-32 animate-pulse"
-              ></div>
+              <div key={i} className="bg-white p-6 rounded-xl shadow-sm h-32 animate-pulse" />
             ))}
           </div>
         }
@@ -81,66 +99,26 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatsCard
             title="Total de Vendas"
-            value={`R$ ${resumo.total_vendas.toLocaleString('pt-BR')},00`}
+            value={fmtBRL(resumo.total_vendas)}
             change={resumo.txt_vendas}
-            percent={resumo.perc_vendas}
-            icon={
-              <svg
-                className="w-6 h-6 text-green-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M11 11V7a4 4 0 118 0v4m-2 4h-2m2 0a2 2 0 11-4 0m4 0v1a2 2 0 002 2h-2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2H9a2 2 0 002-2v-1m0 0H7a2 2 0 01-2-2V7a2 2 0 012-2h3"
-                />
-              </svg>
-            }
+            percent={Number(resumo.perc_vendas) || 0}
+            icon={<FiDollarSign size={24} className="text-green-500" />}
           />
+
           <StatsCard
             title="Produtos em Estoque"
-            value={resumo.total_produtos}
+            value={fmtInt(resumo.total_produtos)}
             change={resumo.txt_produtos}
-            percent={resumo.perc_produtos}
-            icon={
-              <svg
-                className="w-6 h-6 text-blue-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M20 13V7a2 2 0 00-2-2h-4V3a1 1 0 00-2 0v2H8a2 2 0 00-2 2v6m12 0a2 2 0 002 2h-2v4H6v-4H4a2 2 0 002-2m12 0H6"
-                />
-              </svg>
-            }
+            percent={Number(resumo.perc_produtos) || 0}
+            icon={<FiBox size={24} className="text-blue-500" />}
           />
+
           <StatsCard
             title="Clientes Ativos"
-            value={resumo.total_clientes}
+            value={fmtInt(resumo.total_clientes)}
             change={resumo.txt_clientes}
-            percent={resumo.perc_clientes}
-            icon={
-              <svg
-                className="w-6 h-6 text-purple-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7M17 20v-2a3 3 0 00-5.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2a3 3 0 015.356-1.857M15 7a2 2 0 11-4 0 2 2 0 014 0zm-6 2a2 2 0 11-4 0 2 2 0 014 0z"
-                />
-              </svg>
-            }
+            percent={Number(resumo.perc_clientes) || 0}
+            icon={<FiUsers size={24} className="text-purple-500" />}
           />
         </div>
       </Suspense>
@@ -150,10 +128,7 @@ export default function Dashboard() {
         fallback={
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(4)].map((_, i) => (
-              <div
-                key={i}
-                className="bg-white p-6 rounded-xl shadow-sm h-32 animate-pulse"
-              ></div>
+              <div key={i} className="bg-white p-6 rounded-xl shadow-sm h-32 animate-pulse" />
             ))}
           </div>
         }
@@ -162,101 +137,35 @@ export default function Dashboard() {
           <FeatureCard
             title="Produtos"
             description="Gerencie seu catálogo de produtos"
-            icon={
-              <svg
-                className="w-8 h-8 text-blue-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                />
-              </svg>
-            }
+            icon={<FiPackage size={28} className="text-blue-500" />}
             onView={() => navigate('/produtos')}
           />
+
           <FeatureCard
             title="Clientes"
             description="Gerencie sua base de clientes"
-            icon={
-              <svg
-                className="w-8 h-8 text-purple-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 0 018 0z"
-                />
-              </svg>
-            }
+            icon={<FiUsers size={28} className="text-purple-500" />}
             onView={() => navigate('/clientes')}
           />
+
           <FeatureCard
             title="Vendas"
             description="Registre e acompanhe suas vendas"
-            icon={
-              <svg
-                className="w-8 h-8 text-green-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            }
+            icon={<FiShoppingCart size={28} className="text-green-500" />}
             onView={() => navigate('/vendas')}
           />
+
           <FeatureCard
             title="Movimentos"
             description="Registre entradas, saídas e ajustes de estoque"
-            icon={
-              <svg
-                className="w-8 h-8 text-orange-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M20 13V7a2 2 0 00-2-2h-4V3a1 1 0 00-2 0v2H8a2 2 0 00-2 2v6m12 0a2 2 0 002 2h-2v4H6v-4H4a2 2 0 002-2m12 0H6"
-                />
-              </svg>
-            }
+            icon={<FiTruck size={28} className="text-orange-500" />}
             onView={() => navigate('/movimentos')}
           />
+
           <FeatureCard
             title="Fornecedores"
             description="Gerencie sua base de fornecedores"
-            icon={
-              <svg
-                className="w-8 h-8 text-indigo-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M15 7a2 2 0 11-4 0 2 2 0 014 0zm-6 2a2 2 0 11-4 0 2 2 0 014 0zM17 20H7m10 0v-2a3 3 0 00-5.356-1.857M7 20v-2a3 3 0 015.356-1.857"
-                />
-              </svg>
-            }
+            icon={<FiTruck size={28} className="text-indigo-500" />}
             onView={() => navigate('/fornecedores')}
           />
         </div>

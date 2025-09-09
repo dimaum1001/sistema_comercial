@@ -13,23 +13,29 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault()
+    if (loading) return
     setLoading(true)
     setErro('')
     
     try {
-      const response = await axios.post('/auth/login', {
-        email,
-        senha,
-      })
-      
-      localStorage.setItem('token', response.data.access_token)
-      if (response.data.usuario) {
-        localStorage.setItem('usuario', JSON.stringify(response.data.usuario))
+      const { data } = await axios.post('/auth/login', { email, senha })
+
+      // Salva token/usuário
+      localStorage.setItem('token', data.access_token)
+      if (data.usuario) {
+        localStorage.setItem('usuario', JSON.stringify(data.usuario))
       }
-      
+
+      // Garante que próximas requisições já vão autenticadas
+      axios.defaults.headers.common.Authorization = `Bearer ${data.access_token}`
+
+      // Notifica a aplicação que o estado de auth mudou (mesma aba)
+      window.dispatchEvent(new Event('auth-changed'))
+
+      // Vai para o dashboard
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      setErro(err.response?.data?.detail || 'Credenciais inválidas. Por favor, tente novamente.')
+      setErro(err?.response?.data?.detail || 'Credenciais inválidas. Por favor, tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -73,6 +79,7 @@ export default function Login() {
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
                   required
                 />
               </div>
@@ -93,6 +100,7 @@ export default function Login() {
                   className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
+                  autoComplete="current-password"
                   required
                 />
                 <button
@@ -121,7 +129,7 @@ export default function Login() {
               type="submit"
               disabled={loading}
               className={`w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-white font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+                loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
               {loading ? (

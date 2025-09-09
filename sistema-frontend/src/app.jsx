@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -17,12 +18,41 @@ import UsuarioNovo from './pages/UsuarioNovo'
 import UsuarioEditar from './pages/UsuarioEditar'
 import PrecosProdutos from './pages/PrecosProdutos'
 import ContasReceber from './pages/ContasReceber'
-
 // 🔹 Novas páginas
 import ContasPagar from './pages/ContasPagar'
 import Relatorios from './pages/Relatorios'
 
-const isAuthenticated = () => !!localStorage.getItem('token')
+// --------- Controle reativo de autenticação ----------
+function Private({ children }) {
+  const [ready, setReady] = useState(false)
+  const [isAuth, setIsAuth] = useState(!!localStorage.getItem('token'))
+
+  useEffect(() => {
+    // inicialização
+    setIsAuth(!!localStorage.getItem('token'))
+    setReady(true)
+
+    // quando Login.jsx disparar 'auth-changed'
+    const onAuthChanged = () => setIsAuth(!!localStorage.getItem('token'))
+    window.addEventListener('auth-changed', onAuthChanged)
+
+    // mudanças em outra aba
+    const onStorage = (e) => {
+      if (e.key === 'token' || e.key === 'usuario') {
+        setIsAuth(!!localStorage.getItem('token'))
+      }
+    }
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      window.removeEventListener('auth-changed', onAuthChanged)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [])
+
+  if (!ready) return null // evita flicker antes de checar token
+  return isAuth ? children : <Navigate to="/login" replace />
+}
 
 export default function App() {
   return (
@@ -33,7 +63,13 @@ export default function App() {
       <Route path="/register" element={<Register />} />
 
       {/* Rotas privadas (todas dentro do Layout) */}
-      <Route element={isAuthenticated() ? <Layout /> : <Navigate to="/login" />}>
+      <Route
+        element={
+          <Private>
+            <Layout />
+          </Private>
+        }
+      >
         <Route path="/dashboard" element={<Dashboard />} />
 
         {/* Cadastros */}
@@ -59,9 +95,12 @@ export default function App() {
         <Route path="/contas-receber" element={<ContasReceber />} />
         <Route path="/contas-pagar" element={<ContasPagar />} />
 
-        {/* Relatórios (usa ?tab=vendas|mais-vendidos|estoque|ranking) */}
+        {/* Relatórios */}
         <Route path="/relatorios" element={<Relatorios />} />
       </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )
 }
