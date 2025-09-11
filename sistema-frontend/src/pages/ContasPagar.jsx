@@ -24,6 +24,13 @@ const isVencida = (c) => {
   return venc < hoje;
 };
 
+const formatarDataBR = (isoDate) => {
+  if (!isoDate) return "—";
+  const [ano, mes, dia] = isoDate.split("T")[0].split("-");
+  return `${dia}/${mes}/${ano}`;
+};
+
+
 export default function ContasPagar() {
   const [fornecedores, setFornecedores] = useState([]);
   const [contas, setContas] = useState([]);
@@ -148,8 +155,8 @@ export default function ContasPagar() {
       .filter((c) => {
         if (filtroStatus !== "todas" && (c.status || "pendente") !== filtroStatus) return false;
         if (fornecedorFiltro && c.fornecedor_id !== fornecedorFiltro) return false;
-        if (periodo.inicio && new Date(c.data_vencimento) < new Date(periodo.inicio)) return false;
-        if (periodo.fim && new Date(c.data_vencimento) > new Date(periodo.fim)) return false;
+        if (periodo.inicio && c.data_vencimento.slice(0, 10) < periodo.inicio) return false;
+        if (periodo.fim && c.data_vencimento.slice(0, 10) > periodo.fim) return false;
         return true;
       })
       .sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento));
@@ -421,7 +428,7 @@ export default function ContasPagar() {
               return (
                 <tr key={c.id} className={vencida ? "bg-red-50" : ""}>
                   <td className="px-3 py-2">
-                    {new Date(c.data_vencimento).toLocaleDateString("pt-BR")}
+                    {formatarDataBR(c.data_vencimento)}
                   </td>
                   <td className="px-3 py-2">
                     {nomeFornecedor(c.fornecedor_id)}
