@@ -242,7 +242,7 @@ class ContaPagar(Base):
     __tablename__ = "contas_pagar"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    fornecedor_id = Column(UUID(as_uuid=True), ForeignKey("fornecedores.id"), nullable=False)
+    fornecedor_id = Column(UUID(as_uuid=True), ForeignKey("fornecedores.id"), nullable=True)
     descricao = Column(String, nullable=True)
     valor = Column(Numeric(10, 2), nullable=False)
     data_vencimento = Column(Date, nullable=False)

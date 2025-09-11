@@ -10,13 +10,16 @@ from datetime import date, datetime
 from typing import Optional
 import uuid
 
+
 from pydantic import BaseModel, Field
 
 
 class ContaPagarBase(BaseModel):
     """Campos compartilhados entre criações e atualizações de contas a pagar."""
 
-    fornecedor_id: uuid.UUID = Field(..., description="UUID do fornecedor associado")
+    fornecedor_id: Optional[uuid.UUID] = Field(
+    None, description="UUID do fornecedor associado (opcional para contas avulsas)"
+   )
     descricao: Optional[str] = Field(None, description="Descrição opcional da dívida")
     valor: float = Field(..., gt=0, description="Valor da conta a pagar")
     data_vencimento: date = Field(..., description="Data de vencimento da conta")

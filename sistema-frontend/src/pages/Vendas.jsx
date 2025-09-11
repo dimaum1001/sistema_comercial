@@ -10,21 +10,25 @@ import {
 } from "react-icons/fi";
 
 export default function Vendas() {
+  // ---------- Estado ----------
   const [clientes, setClientes] = useState([]);
-  const [produtos, setProdutos] = useState([]);
+  const [buscaCliente, setBuscaCliente] = useState("");
   const [clienteId, setClienteId] = useState("");
-  const [itens, setItens] = useState([]);
+
+  const [produtos, setProdutos] = useState([]);
+  const [buscaProduto, setBuscaProduto] = useState("");
   const [produtoSelecionado, setProdutoSelecionado] = useState("");
   const [quantidade, setQuantidade] = useState(1);
+
+  const [itens, setItens] = useState([]);
   const [vendas, setVendas] = useState([]);
 
-  // % sobre subtotal
   const [descontoPerc, setDescontoPerc] = useState(0);
   const [acrescimoPerc, setAcrescimoPerc] = useState(0);
 
-  // pagamentos (com parcelas)
+  const hoje = new Date().toISOString().slice(0, 10);
   const [pagamentos, setPagamentos] = useState([
-    { forma_pagamento: "dinheiro", valor: "0.00", parcelas: 1, data_vencimento: "" },
+    { forma_pagamento: "dinheiro", valor: "0.00", parcelas: 1, data_vencimento: hoje },
   ]);
   const userEditouPagamentos = useRef(false);
 
@@ -32,6 +36,7 @@ export default function Vendas() {
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState({ texto: "", tipo: "" });
 
+  // ---------- Efeitos ----------
   useEffect(() => {
     carregarClientes();
     carregarProdutos();
@@ -41,7 +46,7 @@ export default function Vendas() {
   async function carregarClientes() {
     try {
       const resp = await api.get("/clientes");
-      setClientes(resp.data);
+      setClientes(resp.data || []);
     } catch {
       setMensagem({ texto: "Erro ao carregar clientes", tipo: "erro" });
     }
@@ -50,7 +55,7 @@ export default function Vendas() {
   async function carregarProdutos() {
     try {
       const resp = await api.get("/produtos");
-      setProdutos(resp.data);
+      setProdutos(resp.data || []);
     } catch {
       setMensagem({ texto: "Erro ao carregar produtos", tipo: "erro" });
     }
@@ -59,12 +64,112 @@ export default function Vendas() {
   async function carregarVendas() {
     try {
       const resp = await api.get("/vendas");
-      setVendas(resp.data);
+      setVendas(resp.data || []);
     } catch {
       setMensagem({ texto: "Erro ao carregar vendas", tipo: "erro" });
     }
   }
 
+  // ---------- Helpers de normalização/busca ----------
+  const normText = (s) =>
+    (s || "")
+      .toString()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "");
+
+  const onlyDigits = (s) => (s || "").toString().replace(/\D/g, "");
+
+  function findCliente(term) {
+    const t = term.trim();
+    if (!t) return null;
+
+    const digits = onlyDigits(t);
+    let m = null;
+
+    if (digits) {
+      m =
+        clientes.find((c) => {
+          const cd = onlyDigits(c?.codigo_cliente);
+          if (!cd) return false;
+          return parseInt(cd, 10) === parseInt(digits, 10);
+        }) ||
+        clientes.find((c) => onlyDigits(c?.codigo_cliente).startsWith(digits));
+    }
+
+    if (m) return m;
+
+    const tn = normText(t);
+    return (
+      clientes.find((c) => normText(c?.nome).startsWith(tn)) ||
+      clientes.find((c) => normText(c?.nome).includes(tn)) ||
+      null
+    );
+  }
+
+  function findProduto(term) {
+    const t = term.trim();
+    if (!t) return null;
+
+    const digits = onlyDigits(t);
+    let m = null;
+
+    if (digits) {
+      m =
+        produtos.find((p) => {
+          const cd = onlyDigits(p?.codigo_produto);
+          if (!cd) return false;
+          return parseInt(cd, 10) === parseInt(digits, 10);
+        }) ||
+        produtos.find((p) => onlyDigits(p?.codigo_produto).startsWith(digits));
+    }
+
+    if (m) return m;
+
+    const tn = normText(t);
+    return (
+      produtos.find((p) => normText(p?.nome).startsWith(tn)) ||
+      produtos.find((p) => normText(p?.nome).includes(tn)) ||
+      null
+    );
+  }
+
+  // ---------- Busca dinâmica (cliente/produto) ----------
+  function handleBuscaClienteChange(val) {
+    setBuscaCliente(val);
+    const c = findCliente(val);
+    setClienteId(c ? c.id : "");
+  }
+
+  function handleBuscaClienteBlur() {
+    const c = findCliente(buscaCliente);
+    if (c) {
+      setClienteId(c.id);
+      setBuscaCliente(
+        `${c.codigo_cliente ? c.codigo_cliente + " - " : ""}${c.nome}`
+      );
+    }
+  }
+
+  function handleBuscaProdutoChange(val) {
+    setBuscaProduto(val);
+    const p = findProduto(val);
+    setProdutoSelecionado(p ? p.id : "");
+  }
+
+  function handleBuscaProdutoBlur() {
+    const p = findProduto(buscaProduto);
+    if (p) {
+      setProdutoSelecionado(p.id);
+      setBuscaProduto(
+        `${p.codigo_produto ? p.codigo_produto + " - " : ""}${p.nome} - R$ ${Number(
+          p.preco_venda ?? 0
+        ).toFixed(2)}`
+      );
+    }
+  }
+
+  // ---------- Itens ----------
   function adicionarItem() {
     if (!produtoSelecionado || quantidade <= 0) {
       setMensagem({
@@ -87,11 +192,12 @@ export default function Vendas() {
     ]);
 
     setProdutoSelecionado("");
+    setBuscaProduto("");
     setQuantidade(1);
   }
 
   function removerItem(index) {
-    setItens(itens.filter((_, i) => i !== index));
+    setItens((prev) => prev.filter((_, i) => i !== index));
   }
 
   // ---------- Totais ----------
@@ -109,7 +215,7 @@ export default function Vendas() {
   );
   const restante = totalFinal - totalPagamentos;
 
-  // Preenche 1º pagamento com total enquanto usuário não mexe
+  // Preenche o 1º pagamento com o total (ou com o restante, caso já existam outros)
   useEffect(() => {
     if (!userEditouPagamentos.current) {
       setPagamentos((curr) => {
@@ -119,20 +225,24 @@ export default function Vendas() {
               forma_pagamento: "dinheiro",
               valor: totalFinal.toFixed(2),
               parcelas: 1,
-              data_vencimento: "",
+              data_vencimento: hoje,
             },
           ];
         }
         const novo = [...curr];
-        novo[0] = { ...novo[0], valor: totalFinal.toFixed(2) };
+        const outros = novo.slice(1).reduce((s, p) => s + Number(p.valor || 0), 0);
+        novo[0] = {
+          ...novo[0],
+          valor: Math.max(totalFinal - outros, 0).toFixed(2),
+          data_vencimento: novo[0].data_vencimento || hoje,
+        };
         return novo;
       });
     }
-  }, [totalFinal]);
+  }, [totalFinal]); // eslint-disable-line
 
-  // helpers de entrada monetária (sem limitar dígitos antes da vírgula)
+  // helpers monetários
   function formatarValorParaState(v) {
-    // aceita 12345, 12345.6, 12345,67 etc
     const s = String(v).replace(/[^\d.,]/g, "").replace(",", ".");
     const num = parseFloat(s);
     return isNaN(num) ? "0.00" : num.toFixed(2);
@@ -140,98 +250,74 @@ export default function Vendas() {
 
   function atualizarPagamento(index, campo, valor) {
     userEditouPagamentos.current = true;
-    const novos = [...pagamentos];
-    if (campo === "valor") {
-      novos[index][campo] = formatarValorParaState(valor);
-    } else if (campo === "parcelas") {
-      const n = Math.max(1, parseInt(valor || "1", 10));
-      novos[index][campo] = n;
-      // se parcelas > 1 e a forma não exige crédito, não forço nada
-      // mas aviso na validação antes de salvar
-    } else {
-      novos[index][campo] = valor;
-    }
-    setPagamentos(novos);
+    setPagamentos((prev) => {
+      const novos = [...prev];
+      if (campo === "valor") {
+        novos[index][campo] = formatarValorParaState(valor);
+      } else if (campo === "parcelas") {
+        const n = Math.max(1, parseInt(valor || "1", 10));
+        novos[index][campo] = n;
+      } else {
+        novos[index][campo] = valor;
+      }
+      return novos;
+    });
   }
 
   function adicionarPagamento() {
     userEditouPagamentos.current = true;
-    setPagamentos((prev) => [
-      ...prev,
-      { forma_pagamento: "dinheiro", valor: "0.00", parcelas: 1, data_vencimento: "" },
-    ]);
+    setPagamentos((prev) => {
+      const pago = prev.reduce((s, p) => s + Number(p.valor || 0), 0);
+      const faltando = Math.max(totalFinal - pago, 0);
+      return [
+        ...prev,
+        {
+          forma_pagamento: "dinheiro",
+          valor: faltando.toFixed(2),
+          parcelas: 1,
+          data_vencimento: hoje,
+        },
+      ];
+    });
   }
 
   function removerPagamento(index) {
-    setPagamentos(pagamentos.filter((_, i) => i !== index));
+    setPagamentos((prev) => prev.filter((_, i) => i !== index));
   }
 
-  // Gera as parcelas (quebra em N linhas para o payload) com vencimentos mensais
-  function explodirPagamentosEmParcelas() {
-    const parcelasGeradas = [];
-    pagamentos.forEach((p) => {
-      const qtd = Number(p.parcelas || 1);
-      const valorNum = Number(p.valor || 0);
-      if (qtd <= 1) {
-        parcelasGeradas.push({
-          forma_pagamento: p.forma_pagamento,
-          valor: Number(valorNum.toFixed(2)),
-          data_vencimento: p.data_vencimento || null,
-        });
-      } else {
-        // precisa de data de vencimento base para parcelas
-        // (validação acontece antes de salvar)
-        const baseDate = p.data_vencimento ? new Date(p.data_vencimento) : null;
+  // ---------- Status fallback (para vendas antigas sem status) ----------
+  function getStatus(v) {
+    if (v?.status && String(v.status).trim()) return v.status;
 
-        const valorParcela = Number((valorNum / qtd).toFixed(2));
-        // para somar exato, a última parcela ajusta centavos de diferença
-        const somaAux = valorParcela * (qtd - 1);
-        const ultimaParcela = Number((valorNum - somaAux).toFixed(2));
+    const somaPagos = Array.isArray(v?.pagamentos)
+      ? v.pagamentos.reduce((s, p) => s + Number(p?.valor || 0), 0)
+      : Number(v?.total_pago || 0) || 0;
 
-        for (let i = 0; i < qtd; i++) {
-          let venc = null;
-          if (baseDate) {
-            const d = new Date(baseDate);
-            d.setMonth(d.getMonth() + i);
-            venc = d.toISOString().slice(0, 10); // yyyy-mm-dd
-          }
-          parcelasGeradas.push({
-            forma_pagamento: p.forma_pagamento,
-            valor: i === qtd - 1 ? ultimaParcela : valorParcela,
-            data_vencimento: venc,
-            parcela_numero: i + 1,
-            parcela_total: qtd,
-          });
-        }
-      }
-    });
-    return parcelasGeradas;
+    const total = Number(v?.total || 0);
+
+    if (total > 0 && somaPagos >= total) return "pago";
+    if (somaPagos > 0 && somaPagos < total) return "pago parcial";
+    return "pendente";
   }
 
+  // ---------- Salvar ----------
   async function salvarVenda() {
     if (itens.length === 0) {
       setMensagem({ texto: "Adicione pelo menos um item", tipo: "erro" });
       return;
     }
 
-    // validação de pagamentos
     if (totalPagamentos > totalFinal + 0.001) {
-      setMensagem({ texto: "Pagamentos excedem o total da venda.", tipo: "erro" });
+      setMensagem({
+        texto: "Pagamentos excedem o total da venda.",
+        tipo: "erro",
+      });
       return;
     }
 
-    // se houver parcelas > 1, exigir data base
-    for (const p of pagamentos) {
-      if ((p.parcelas || 1) > 1 && !p.data_vencimento) {
-        setMensagem({
-          texto: "Informe uma data de vencimento para gerar as parcelas.",
-          tipo: "erro",
-        });
-        return;
-      }
-    }
-
-    const pagamentosExplodidos = explodirPagamentosEmParcelas();
+    let status = "pendente";
+    if (restante <= 0) status = "pago";
+    else if (totalPagamentos > 0 && restante > 0) status = "pago parcial";
 
     setLoading(true);
     try {
@@ -240,12 +326,13 @@ export default function Vendas() {
         desconto: Number(descontoValor.toFixed(2)),
         acrescimo: Number(acrescimoValor.toFixed(2)),
         observacao,
+        status,
         itens: itens.map((item) => ({
           produto_id: item.produto_id,
           quantidade: item.quantidade,
           preco_unit: Number(item.preco_unit.toFixed(2)),
         })),
-        pagamentos: pagamentosExplodidos.map((p) => ({
+        pagamentos: pagamentos.map((p) => ({
           forma_pagamento: p.forma_pagamento,
           valor: Number(p.valor),
           data_vencimento: p.data_vencimento || null,
@@ -255,14 +342,16 @@ export default function Vendas() {
       });
 
       setMensagem({ texto: "Venda registrada com sucesso!", tipo: "sucesso" });
+      // reset
       setClienteId("");
+      setBuscaCliente("");
       setItens([]);
       setDescontoPerc(0);
       setAcrescimoPerc(0);
       setObservacao("");
       userEditouPagamentos.current = false;
       setPagamentos([
-        { forma_pagamento: "dinheiro", valor: "0.00", parcelas: 1, data_vencimento: "" },
+        { forma_pagamento: "dinheiro", valor: "0.00", parcelas: 1, data_vencimento: hoje },
       ]);
       carregarVendas();
     } catch (err) {
@@ -275,75 +364,88 @@ export default function Vendas() {
     }
   }
 
+  // ---------- UI ----------
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center mb-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-5">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-xl font-bold text-gray-800 flex items-center mb-4">
           <FiShoppingCart className="mr-2" /> Registro de Vendas
         </h1>
 
-        {/* Mensagem */}
         {mensagem.texto && (
           <div
-            className={`mb-4 p-3 rounded-lg ${
+            className={`mb-4 p-2 rounded text-sm ${
               mensagem.tipo === "sucesso"
-                ? "bg-green-100 text-green-800 border border-green-200"
-                : "bg-red-100 text-red-800 border border-red-200"
+                ? "bg-green-100 text-green-800"
+                : "bg-red-100 text-red-800"
             }`}
           >
             {mensagem.texto}
           </div>
         )}
 
-        {/* Nova Venda */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4 flex items-center">
-            <FiPlus className="mr-2" /> Nova Venda
+        <div className="bg-white rounded shadow p-4 mb-6">
+          <h2 className="text-md font-semibold mb-3 flex items-center">
+            <FiPlus className="mr-1" /> Nova Venda
           </h2>
 
           {/* Cliente */}
-          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-            <FiUser className="mr-1" /> Cliente
-          </label>
-          <select
-            className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500"
-            value={clienteId}
-            onChange={(e) => setClienteId(e.target.value)}
-          >
-            <option value="">Venda sem cliente</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              placeholder="Código/Nome do cliente..."
+              className="w-1/2 text-sm p-1.5 border border-gray-300 rounded"
+              value={buscaCliente}
+              onChange={(e) => handleBuscaClienteChange(e.target.value)}
+              onBlur={handleBuscaClienteBlur}
+            />
+            <select
+              className="flex-1 text-sm p-1.5 border border-gray-300 rounded"
+              value={clienteId}
+              onChange={(e) => setClienteId(e.target.value)}
+            >
+              <option value="">Venda sem cliente</option>
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.codigo_cliente ? `${c.codigo_cliente} - ` : ""}
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Produto */}
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Produto
-          </label>
-          <div className="flex gap-2 mb-6">
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text"
+              placeholder="Código/Nome do produto..."
+              className="w-1/2 text-sm p-1.5 border border-gray-300 rounded"
+              value={buscaProduto}
+              onChange={(e) => handleBuscaProdutoChange(e.target.value)}
+              onBlur={handleBuscaProdutoBlur}
+            />
             <select
-              className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="flex-1 text-sm p-1.5 border border-gray-300 rounded"
               value={produtoSelecionado}
               onChange={(e) => setProdutoSelecionado(e.target.value)}
             >
               <option value="">Selecione um produto</option>
               {produtos.map((p) => (
                 <option key={p.id} value={p.id}>
+                  {p.codigo_produto ? `${p.codigo_produto} - ` : ""}
                   {p.nome} - R$ {Number(p.preco_venda ?? 0).toFixed(2)}
                 </option>
               ))}
             </select>
             <input
               type="number"
-              className="w-24 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-20 text-sm p-1.5 border border-gray-300 rounded"
               value={quantidade}
               min="1"
               onChange={(e) => setQuantidade(Number(e.target.value))}
             />
             <button
-              className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 flex items-center"
+              className="bg-blue-600 text-white text-sm px-3 py-1.5 rounded hover:bg-blue-700 flex items-center"
               onClick={adicionarItem}
             >
               <FiPlus className="mr-1" /> Adicionar
@@ -351,300 +453,194 @@ export default function Vendas() {
           </div>
 
           {/* Pagamentos */}
-          <div className="grid grid-cols-1 gap-3">
-            <label className="block text-sm font-medium text-gray-700">
-              Pagamentos (pode dividir em parcelas)
-            </label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Pagamentos
+          </label>
 
-            {pagamentos.map((p, idx) => (
-              <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-center">
-                <select
-                  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  value={p.forma_pagamento}
-                  onChange={(e) =>
-                    atualizarPagamento(idx, "forma_pagamento", e.target.value)
-                  }
-                >
-                  <option value="dinheiro">Dinheiro</option>
-                  <option value="credito">Cartão de Crédito</option>
-                  <option value="debito">Cartão de Débito</option>
-                  <option value="pix">PIX</option>
-                </select>
-
-                <input
-                  type="text"
-                  className="p-2 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500"
-                  value={p.valor}
-                  onChange={(e) => atualizarPagamento(idx, "valor", e.target.value)}
-                  placeholder="0,00"
-                />
-
-                <input
-                  type="number"
-                  min="1"
-                  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  value={p.parcelas}
-                  onChange={(e) => atualizarPagamento(idx, "parcelas", e.target.value)}
-                  title="Número de parcelas (1 = à vista)"
-                />
-
-                <input
-                  type="date"
-                  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  value={p.data_vencimento}
-                  onChange={(e) =>
-                    atualizarPagamento(idx, "data_vencimento", e.target.value)
-                  }
-                  title="Data base para vencimento (obrigatória se houver parcelas)"
-                />
-
-                {idx > 0 && (
-                  <button
-                    onClick={() => removerPagamento(idx)}
-                    className="text-red-600 hover:text-red-800 p-2 justify-self-start md:justify-self-end"
-                    title="Remover pagamento"
-                  >
-                    <FiTrash2 />
-                  </button>
-                )}
-              </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={adicionarPagamento}
-              className="text-blue-600 text-sm mt-1"
-            >
-              + Adicionar pagamento
-            </button>
-
-            <div className="mt-2 text-sm">
-              <div>
-                Total pago: <strong>R$ {totalPagamentos.toFixed(2)}</strong>
-              </div>
-              <div
-                className={
-                  restante > 0.001
-                    ? "text-amber-600"
-                    : restante < -0.001
-                    ? "text-red-600"
-                    : "text-green-700"
-                }
-              >
-                Restante: <strong>R$ {restante.toFixed(2)}</strong>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-[11px] text-gray-500 mb-1">
+            <div>Forma</div>
+            <div>Valor</div>
+            <div>Qtd. vezes</div>
+            <div>Vencimento</div>
+            <div></div>
           </div>
 
-          {/* Desconto/Acréscimo */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Desconto (%)
-              </label>
+          {pagamentos.map((p, idx) => (
+            <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+              <select
+                className="text-sm p-1.5 border border-gray-300 rounded"
+                value={p.forma_pagamento}
+                onChange={(e) =>
+                  atualizarPagamento(idx, "forma_pagamento", e.target.value)
+                }
+              >
+                <option value="dinheiro">Dinheiro</option>
+                <option value="credito">Cartão de Crédito</option>
+                <option value="debito">Cartão de Débito</option>
+                <option value="pix">PIX</option>
+              </select>
+
+              <input
+                type="text"
+                className="text-sm p-1.5 border border-gray-300 rounded text-right"
+                value={p.valor}
+                onChange={(e) => atualizarPagamento(idx, "valor", e.target.value)}
+              />
+
               <input
                 type="number"
-                step="0.01"
-                min="0"
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                value={descontoPerc}
-                onChange={(e) => setDescontoPerc(Number(e.target.value))}
+                min="1"
+                placeholder="Qtd. vezes"
+                className="text-sm p-1.5 border border-gray-300 rounded"
+                value={p.parcelas}
+                onChange={(e) => atualizarPagamento(idx, "parcelas", e.target.value)}
+                title="Quantidade de parcelas (1 = à vista)"
               />
+
+              <input
+                type="date"
+                className="text-sm p-1.5 border border-gray-300 rounded"
+                value={p.data_vencimento}
+                onChange={(e) =>
+                  atualizarPagamento(idx, "data_vencimento", e.target.value)
+                }
+              />
+
+              {idx > 0 && (
+                <button
+                  onClick={() => removerPagamento(idx)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <FiTrash2 />
+                </button>
+              )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Acréscimo (%)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                value={acrescimoPerc}
-                onChange={(e) => setAcrescimoPerc(Number(e.target.value))}
-              />
+          ))}
+          <button
+            type="button"
+            onClick={adicionarPagamento}
+            className="text-blue-600 text-xs"
+          >
+            + Adicionar pagamento
+          </button>
+
+          <div className="mt-2 text-xs">
+            <div>Total da venda: <strong>R$ {totalFinal.toFixed(2)}</strong></div>
+            <div>Total pago: <strong>R$ {totalPagamentos.toFixed(2)}</strong></div>
+            <div
+              className={
+                restante > 0.001
+                  ? "text-amber-600"
+                  : restante < -0.001
+                  ? "text-red-600"
+                  : "text-green-700"
+              }
+            >
+              Restante: <strong>R$ {restante.toFixed(2)}</strong>
             </div>
           </div>
 
           {/* Observação */}
-          <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Observação
-            </label>
+          <div className="mt-3">
+            <label className="block text-xs mb-1">Observação</label>
             <textarea
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full text-sm p-1.5 border border-gray-300 rounded"
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
-              placeholder="Ex: Venda fiado, desconto especial..."
+              placeholder="Ex: venda fiado, desconto especial..."
             />
           </div>
 
           {/* Itens */}
           {itens.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Itens</h3>
-              <div className="bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                        Produto
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                        Qtd
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                        Preço Unit.
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                        Subtotal
-                      </th>
-                      <th className="px-4 py-2"></th>
+            <div className="mt-4">
+              <h3 className="text-sm font-medium mb-2">Itens</h3>
+              <table className="w-full text-xs border border-gray-200">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="px-2 py-1 text-left">Produto</th>
+                    <th className="px-2 py-1">Qtd</th>
+                    <th className="px-2 py-1 text-right">Unit</th>
+                    <th className="px-2 py-1 text-right">Subtotal</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itens.map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="px-2 py-1">{item.nome}</td>
+                      <td className="px-2 py-1 text-center">{item.quantidade}</td>
+                      <td className="px-2 py-1 text-right">
+                        R$ {item.preco_unit.toFixed(2)}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        R$ {(item.preco_unit * item.quantidade).toFixed(2)}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <button
+                          onClick={() => removerItem(idx)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <FiTrash2 />
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {itens.map((item, index) => (
-                      <tr key={index}>
-                        <td className="px-4 py-2 text-sm text-gray-900">
-                          {item.nome}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500">
-                          {item.quantidade}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500">
-                          R$ {item.preco_unit.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500">
-                          R$ {(item.preco_unit * item.quantidade).toFixed(2)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm">
-                          <button
-                            onClick={() => removerItem(index)}
-                            className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50 transition"
-                            title="Remover"
-                          >
-                            <FiTrash2 />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Totais */}
-              <div className="mt-4 text-right">
-                <p className="text-sm text-gray-600">
-                  Subtotal: R$ {subtotalItens.toFixed(2)}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Desconto ({Number(descontoPerc).toFixed(2)}%): - R$ {descontoValor.toFixed(2)}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Acréscimo ({Number(acrescimoPerc).toFixed(2)}%): + R$ {acrescimoValor.toFixed(2)}
-                </p>
-                <p className="text-lg font-semibold text-gray-900">
-                  Total: R$ {totalFinal.toFixed(2)}
-                </p>
-              </div>
-
-              <div className="flex justify-end mt-4">
-                <button
-                  onClick={salvarVenda}
-                  disabled={loading}
-                  className={`flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition ${
-                    loading ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                >
-                  {loading ? (
-                    <>
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      Salvando...
-                    </>
-                  ) : (
-                    <>
-                      <FiSave className="mr-2" />
-                      Finalizar Venda
-                    </>
-                  )}
-                </button>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
+
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={salvarVenda}
+              disabled={loading}
+              className={`flex items-center text-sm px-5 py-2 bg-green-600 text-white rounded hover:bg-green-700 ${
+                loading ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+            >
+              {loading ? "Salvando..." : (<><FiSave className="mr-2" /> Finalizar Venda</>)}
+            </button>
+          </div>
         </div>
 
-        {/* Histórico de vendas */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center">
-            <FiClock className="mr-2" />
-            Histórico de Vendas
+        {/* Histórico */}
+        <div className="bg-white rounded shadow p-4">
+          <h2 className="text-md font-semibold mb-3 flex items-center">
+            <FiClock className="mr-2" /> Histórico de Vendas
           </h2>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full text-xs">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Data
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Cliente
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Total
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Observação
-                  </th>
+                  <th className="px-4 py-2 text-left">Data</th>
+                  <th className="px-4 py-2 text-left">Cliente</th>
+                  <th className="px-4 py-2 text-right">Total</th>
+                  <th className="px-4 py-2 text-left">Status</th>
+                  <th className="px-4 py-2 text-left">Observação</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {vendas.map((v) => (
                   <tr key={v.id}>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-4 py-2">
                       {new Date(v.data_venda).toLocaleString("pt-BR", {
                         timeZone: "America/Sao_Paulo",
                       })}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {v.cliente?.nome || "Sem cliente"}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-4 py-2">{v.cliente?.nome || "Sem cliente"}</td>
+                    <td className="px-4 py-2 text-right">
                       R$ {Number(v.total).toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {v.status}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {v.observacao || "-"}
-                    </td>
+                    <td className="px-4 py-2">{getStatus(v)}</td>
+                    <td className="px-4 py-2">{v.observacao || "-"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+
       </div>
     </div>
   );
