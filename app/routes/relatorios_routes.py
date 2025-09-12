@@ -3,7 +3,7 @@ from typing import Optional, Tuple, List
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc, cast, Date
 
 from app.db.database import get_db
@@ -23,6 +23,9 @@ def _date_range(inicio: Optional[date], fim: Optional[date]) -> Tuple[date, date
     return di, df
 
 
+# ======================
+# Relatório Resumido
+# ======================
 @router.get("/vendas")
 def vendas_por_periodo(
     inicio: Optional[date] = Query(None),
@@ -53,6 +56,53 @@ def vendas_por_periodo(
     }
 
 
+# ======================
+# Relatório Detalhado
+# ======================
+@router.get("/vendas/detalhadas")
+def vendas_detalhadas(
+    inicio: Optional[date] = Query(None),
+    fim: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    di, df = _date_range(inicio, fim)
+
+    vendas = (
+        db.query(Venda)
+        .options(
+            joinedload(Venda.cliente),
+            joinedload(Venda.itens).joinedload(VendaItem.produto),
+        )
+        .filter(cast(Venda.data_venda, Date) >= di)
+        .filter(cast(Venda.data_venda, Date) < df)
+        .order_by(Venda.data_venda.desc())
+        .all()
+    )
+
+    resultado: List[dict] = []
+    for v in vendas:
+        resultado.append({
+            "id": str(v.id),
+            "data_venda": v.data_venda,
+            "cliente": v.cliente.nome if v.cliente else "—",
+            "total": float(v.total or 0.0),
+            "itens": [
+                {
+                    "produto": i.produto.nome if i.produto else "—",
+                    "quantidade": i.quantidade,
+                    "preco_unit": float(i.preco_unit),
+                    "subtotal": float(i.preco_unit) * i.quantidade,
+                }
+                for i in v.itens
+            ],
+        })
+
+    return resultado
+
+
+# ======================
+# Produtos Mais Vendidos
+# ======================
 @router.get("/produtos-mais-vendidos")
 def produtos_mais_vendidos(
     inicio: Optional[date] = Query(None),
@@ -83,6 +133,9 @@ def produtos_mais_vendidos(
     return [dict(r._mapping) for r in rows]
 
 
+# ======================
+# Estoque Atual
+# ======================
 @router.get("/estoque-atual")
 def estoque_atual(
     alerta: Optional[bool] = Query(None, description="Se true, retorna apenas itens abaixo do mínimo"),
@@ -110,6 +163,9 @@ def estoque_atual(
     return data
 
 
+# ======================
+# Ranking de Clientes
+# ======================
 @router.get("/ranking-clientes")
 def ranking_clientes(
     inicio: Optional[date] = Query(None),

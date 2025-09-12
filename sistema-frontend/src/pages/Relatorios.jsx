@@ -2,63 +2,54 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../services/api'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const fmtBRL = (n) =>
   Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0))
 const fmtInt = (n) => Intl.NumberFormat('pt-BR').format(Number(n || 0))
-
-const toISO = (d) => d.toISOString().slice(0, 10) // yyyy-mm-dd
+const toISO = (d) => d.toISOString().slice(0, 10)
 
 export default function Relatorios() {
   const location = useLocation()
   const navigate = useNavigate()
   const search = useMemo(() => new URLSearchParams(location.search), [location.search])
 
-  // aba ativa pelos query params (?tab=vendas|produtos|estoque|ranking)
-  const initialTab = search.get('tab') || 'vendas'
+  const initialTab = search.get('tab') || 'vendas-resumo'
   const [tab, setTab] = useState(initialTab)
-
-  // período (mês atual auto)
   const [periodo, setPeriodo] = useState({ inicio: '', fim: '' })
 
-  // dados
   const [resumoVendas, setResumoVendas] = useState({ qtd_vendas: 0, total_vendas: 0 })
+  const [detalhesVendas, setDetalhesVendas] = useState([])
   const [produtosMaisVendidos, setProdutosMaisVendidos] = useState([])
   const [rankingClientes, setRankingClientes] = useState([])
   const [estoqueAtual, setEstoqueAtual] = useState([])
 
-  // estados auxiliares
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
   const [estoqueLoaded, setEstoqueLoaded] = useState(false)
 
-  // mantém estado em sincronia com a URL (?tab=)
   useEffect(() => {
-    const t = search.get('tab') || 'vendas'
+    const t = search.get('tab') || 'vendas-resumo'
     setTab(t)
   }, [search])
 
-  // define mês atual e dispara buscas iniciais (vendas, produtos, ranking)
   useEffect(() => {
     const today = new Date()
     const first = new Date(today.getFullYear(), today.getMonth(), 1)
     const inicio = toISO(first)
     const fim = toISO(today)
     setPeriodo({ inicio, fim })
-
-    // dispara assim que definir as datas
     ;(async () => {
-      await gerarRelatorios({ inicio, fim })
+      await carregarResumoVendas({ inicio, fim })
+      await carregarVendasDetalhadas({ inicio, fim })
     })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // quando usuário mudar aba para estoque e ainda não carregou, busca estoque
   useEffect(() => {
     if (tab === 'estoque' && !estoqueLoaded) {
       carregarEstoque()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
   const handlePeriodoChange = (e) => {
@@ -74,122 +65,176 @@ export default function Relatorios() {
   const carregarEstoque = async () => {
     try {
       const { data } = await api.get('/relatorios/estoque-atual')
-      setEstoqueAtual(data || [])
+      const arr = data || []
+      setEstoqueAtual(arr)
       setEstoqueLoaded(true)
+      return arr // <- retorna dados para uso imediato no PDF
     } catch (e) {
       console.error('Erro ao carregar estoque atual:', e)
+      return []
     }
   }
 
-  const gerarRelatorios = async (p) => {
+  const carregarResumoVendas = async (p) => {
     const useP = p || periodo
-    if (!useP.inicio || !useP.fim) {
-      alert('Por favor, selecione datas de início e fim.')
-      return
+    try {
+      const { data } = await api.get('/relatorios/vendas', { params: useP })
+      setResumoVendas({
+        qtd_vendas: Number(data?.qtd_vendas || 0),
+        total_vendas: Number(data?.total_vendas || 0)
+      })
+    } catch (e) {
+      console.error('Erro ao carregar resumo de vendas:', e)
+      setErro('Não foi possível carregar resumo de vendas.')
     }
+  }
+
+  const carregarVendasDetalhadas = async (p) => {
+    const useP = p || periodo
+    try {
+      const { data } = await api.get('/relatorios/vendas/detalhadas', { params: useP })
+      setDetalhesVendas(Array.isArray(data) ? data : [])
+    } catch (e) {
+      console.error('Erro ao carregar vendas detalhadas:', e)
+      setDetalhesVendas([])
+    }
+  }
+
+  const carregarOutrosRelatorios = async (p) => {
+    const useP = p || periodo
+    try {
+      const [produtosRes, rankingRes] = await Promise.allSettled([
+        api.get('/relatorios/produtos-mais-vendidos', { params: useP }),
+        api.get('/relatorios/ranking-clientes', { params: useP })
+      ])
+      if (produtosRes.status === 'fulfilled') {
+        setProdutosMaisVendidos(Array.isArray(produtosRes.value.data) ? produtosRes.value.data : [])
+      }
+      if (rankingRes.status === 'fulfilled') {
+        setRankingClientes(Array.isArray(rankingRes.value.data) ? rankingRes.value.data : [])
+      }
+    } catch (e) {
+      console.error('Erro ao carregar relatórios adicionais:', e)
+    }
+  }
+
+  const aplicarPeriodo = async () => {
     setLoading(true)
     setErro('')
     try {
-      const params = { inicio: useP.inicio, fim: useP.fim }
-      const [vendasResp, produtosResp, rankingResp] = await Promise.all([
-        api.get('/relatorios/vendas', { params }),
-        api.get('/relatorios/produtos-mais-vendidos', { params }),
-        api.get('/relatorios/ranking-clientes', { params })
+      await Promise.all([
+        carregarResumoVendas(),
+        carregarVendasDetalhadas(),
+        carregarOutrosRelatorios()
       ])
-
-      setResumoVendas({
-        qtd_vendas: Number(vendasResp.data?.qtd_vendas || 0),
-        total_vendas: Number(vendasResp.data?.total_vendas || 0)
-      })
-
-      setProdutosMaisVendidos(Array.isArray(produtosResp.data) ? produtosResp.data : [])
-      setRankingClientes(Array.isArray(rankingResp.data) ? rankingResp.data : [])
-    } catch (e) {
-      console.error('Erro ao gerar relatórios:', e)
-      setErro(e?.response?.data?.detail || 'Não foi possível gerar os relatórios.')
+      if (tab === 'estoque') await carregarEstoque()
     } finally {
       setLoading(false)
     }
   }
 
-  // componente de filtro de período + resumo
+  // === Exportação para PDF (agora cobre Estoque e garante dados carregados) ===
+  const exportarPDF = async () => {
+    const doc = new jsPDF()
+    const titulos = {
+      'vendas-resumo': 'Resumo de Vendas',
+      'vendas-detalhadas': 'Vendas Detalhadas',
+      produtos: 'Produtos Mais Vendidos',
+      estoque: 'Estoque Atual',
+      ranking: 'Ranking de Clientes'
+    }
+    const titulo = `Relatório - ${titulos[tab]}`
+    doc.setFontSize(14)
+    doc.text(titulo, 14, 15)
+    doc.setFontSize(10)
+    doc.text(`Período: ${periodo.inicio || '—'} → ${periodo.fim || '—'}`, 14, 22)
+    const startY = 28
+
+    if (tab === 'vendas-resumo') {
+      autoTable(doc, {
+        startY,
+        head: [['Métrica', 'Valor']],
+        body: [
+          ['Quantidade de Vendas', fmtInt(resumoVendas.qtd_vendas)],
+          ['Total do Período', fmtBRL(resumoVendas.total_vendas)]
+        ]
+      })
+    } else if (tab === 'vendas-detalhadas') {
+      autoTable(doc, {
+        startY,
+        head: [['Data', 'Cliente', 'Total', 'Itens']],
+        body: detalhesVendas.map((v) => [
+          v.data_venda,
+          v.cliente || '—',
+          fmtBRL(v.total),
+          v.itens?.map((i) => `${i.produto} (x${i.quantidade})`).join(', ')
+        ])
+      })
+    } else if (tab === 'produtos') {
+      autoTable(doc, {
+        startY,
+        head: [['Produto', 'Código', 'Quantidade', 'Faturamento']],
+        body: produtosMaisVendidos.map((item) => [
+          item.produto,
+          item.codigo ?? '—',
+          fmtInt(item.quantidade),
+          fmtBRL(item.faturamento)
+        ])
+      })
+    } else if (tab === 'estoque') {
+      // garante ter dados do estoque; usa retorno imediato para montar a tabela
+      const dataEstoque = estoqueLoaded ? estoqueAtual : await carregarEstoque()
+      autoTable(doc, {
+        startY,
+        head: [['Produto', 'Código', 'Estoque', 'Estoque Mínimo', 'Alerta']],
+        body: (dataEstoque || []).map((p) => [
+          p.produto,
+          p.codigo ?? '—',
+          fmtInt(p.estoque),
+          fmtInt(p.estoque_minimo),
+          p.alerta ? 'Baixo' : 'OK'
+        ])
+      })
+    } else if (tab === 'ranking') {
+      autoTable(doc, {
+        startY,
+        head: [['Cliente', 'Qtde Compras', 'Total Gasto']],
+        body: rankingClientes.map((item) => [
+          item.cliente,
+          fmtInt(item.qtd_compras),
+          fmtBRL(item.total_gasto)
+        ])
+      })
+    }
+
+    doc.save(`relatorio-${tab}.pdf`)
+  }
+  // === fim exportação ===
+
   const HeaderPeriodo = () => (
     <div className="bg-white shadow-md rounded px-6 pt-5 pb-6 mb-6">
       <h3 className="text-xl font-semibold mb-4">Período</h3>
       <div className="flex flex-wrap items-end gap-4 mb-4">
-        <div>
-          <label className="block text-gray-700 text-sm mb-1">Data início</label>
-          <input
-            type="date"
-            name="inicio"
-            value={periodo.inicio}
-            onChange={handlePeriodoChange}
-            className="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline"
-          />
-        </div>
-        <div>
-          <label className="block text-gray-700 text-sm mb-1">Data fim</label>
-          <input
-            type="date"
-            name="fim"
-            value={periodo.fim}
-            onChange={handlePeriodoChange}
-            className="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline"
-          />
-        </div>
-        <button
-          onClick={() => gerarRelatorios()}
-          disabled={loading}
-          className={`${
-            loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-          } text-white font-semibold py-2 px-4 rounded`}
-        >
+        <input type="date" name="inicio" value={periodo.inicio} onChange={handlePeriodoChange} className="shadow border rounded py-2 px-3" />
+        <input type="date" name="fim" value={periodo.fim} onChange={handlePeriodoChange} className="shadow border rounded py-2 px-3" />
+        <button onClick={aplicarPeriodo} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded">
           {loading ? 'Atualizando...' : 'Aplicar período'}
         </button>
+        <button onClick={exportarPDF} className="bg-green-600 text-white px-4 py-2 rounded">Exportar PDF</button>
       </div>
-
-      {/* Resumo geral do período (útil para Vendas/Produtos/Ranking) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-          <div className="text-sm text-gray-600">Quantidade de Vendas</div>
-          <div className="text-2xl font-bold text-gray-800">{fmtInt(resumoVendas.qtd_vendas)}</div>
-        </div>
-        <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-          <div className="text-sm text-gray-600">Total do Período</div>
-          <div className="text-2xl font-bold text-gray-800">{fmtBRL(resumoVendas.total_vendas)}</div>
-        </div>
-        <div className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-          <div className="text-sm text-gray-600">Intervalo Selecionado</div>
-          <div className="text-base text-gray-800">
-            {periodo.inicio || '—'} → {periodo.fim || '—'}
-          </div>
-        </div>
-      </div>
-
-      {!!erro && (
-        <div className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-          {erro}
-        </div>
-      )}
     </div>
   )
 
-  // abas internas (opcional – ajuda quando chegar por /relatorios sem ?tab=)
   const Tabs = () => (
     <div className="mb-4 flex gap-2">
       {[
-        { key: 'vendas', label: 'Vendas por Período' },
+        { key: 'vendas-resumo', label: 'Resumo de Vendas' },
+        { key: 'vendas-detalhadas', label: 'Vendas Detalhadas' },
         { key: 'produtos', label: 'Produtos Mais Vendidos' },
         { key: 'estoque', label: 'Estoque Atual' },
         { key: 'ranking', label: 'Ranking de Clientes' }
       ].map((t) => (
-        <button
-          key={t.key}
-          onClick={() => pushTab(t.key)}
-          className={`px-4 py-2 rounded-lg border ${
-            tab === t.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'
-          }`}
-        >
+        <button key={t.key} onClick={() => pushTab(t.key)} className={`px-4 py-2 rounded border ${tab === t.key ? 'bg-blue-600 text-white' : 'bg-white'}`}>
           {t.label}
         </button>
       ))}
@@ -201,49 +246,51 @@ export default function Relatorios() {
       <h2 className="text-2xl font-bold mb-4">Relatórios</h2>
       <Tabs />
 
-      {/* VENDAS */}
-      {tab === 'vendas' && (
+      {tab === 'vendas-resumo' && (
         <>
           <HeaderPeriodo />
-          <div className="bg-white shadow-md rounded px-6 pt-5 pb-6">
-            <h3 className="text-xl font-semibold mb-4">Vendas por Período</h3>
-            <p className="text-gray-600">Use o período acima para atualizar os dados.</p>
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="text-xl font-semibold mb-4">Resumo de Vendas</h3>
+            <p>Total de vendas: {fmtInt(resumoVendas.qtd_vendas)}</p>
+            <p>Valor total: {fmtBRL(resumoVendas.total_vendas)}</p>
           </div>
         </>
       )}
 
-      {/* PRODUTOS MAIS VENDIDOS */}
-      {tab === 'produtos' && (
+      {tab === 'vendas-detalhadas' && (
         <>
           <HeaderPeriodo />
-          <div className="bg-white shadow-md rounded px-6 pt-5 pb-6">
-            <h3 className="text-xl font-semibold mb-4">Produtos Mais Vendidos</h3>
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="text-xl font-semibold mb-4">Vendas Detalhadas</h3>
             <div className="overflow-x-auto">
-              <table className="min-w-full bg-white">
+              <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="text-left">
-                    <th className="py-2 px-4 border-b">Produto</th>
-                    <th className="py-2 px-4 border-b">Código</th>
-                    <th className="py-2 px-4 border-b text-right">Quantidade</th>
-                    <th className="py-2 px-4 border-b text-right">Faturamento</th>
+                  <tr>
+                    <th className="text-left py-2 px-3">Data</th>
+                    <th className="text-left py-2 px-3">Cliente</th>
+                    <th className="text-right py-2 px-3">Total</th>
+                    <th className="text-left py-2 px-3">Itens</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {produtosMaisVendidos.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-3 px-4 text-center text-gray-500">
-                        Nenhum item no período selecionado.
+                  {detalhesVendas.map((v, idx) => (
+                    <tr key={idx} className="border-t">
+                      <td className="py-2 px-3">{v.data_venda}</td>
+                      <td className="py-2 px-3">{v.cliente || '—'}</td>
+                      <td className="py-2 px-3 text-right">{fmtBRL(v.total)}</td>
+                      <td className="py-2 px-3">
+                        {v.itens?.map((i, ix) => (
+                          <div key={ix}>{i.produto} (x{i.quantidade})</div>
+                        ))}
                       </td>
                     </tr>
-                  ) : (
-                    produtosMaisVendidos.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="py-2 px-4 border-b">{item.produto}</td>
-                        <td className="py-2 px-4 border-b">{item.codigo}</td>
-                        <td className="py-2 px-4 border-b text-right">{fmtInt(item.quantidade)}</td>
-                        <td className="py-2 px-4 border-b text-right">{fmtBRL(item.faturamento)}</td>
-                      </tr>
-                    ))
+                  ))}
+                  {detalhesVendas.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="text-center py-4 text-gray-500">
+                        Nenhuma venda encontrada neste período.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -252,44 +299,83 @@ export default function Relatorios() {
         </>
       )}
 
-      {/* ESTOQUE ATUAL */}
+      {tab === 'produtos' && (
+        <>
+          <HeaderPeriodo />
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="text-xl font-semibold mb-4">Produtos Mais Vendidos</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Código</th>
+                    <th className="text-right">Quantidade</th>
+                    <th className="text-right">Faturamento</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {produtosMaisVendidos.map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{item.produto}</td>
+                      <td>{item.codigo}</td>
+                      <td className="text-right">{fmtInt(item.quantidade)}</td>
+                      <td className="text-right">{fmtBRL(item.faturamento)}</td>
+                    </tr>
+                  ))}
+                  {produtosMaisVendidos.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="text-center py-2">Nenhum item encontrado.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
       {tab === 'estoque' && (
-        <div className="bg-white shadow-md rounded px-6 pt-5 pb-6">
-          <h3 className="text-xl font-semibold mb-4">Estoque Atual</h3>
+        <div className="bg-white p-6 rounded shadow">
+          {/* Topo com botão de PDF nesta tela */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold">Estoque Atual</h3>
+            <button
+              onClick={exportarPDF}
+              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
+              aria-label="Exportar estoque em PDF"
+            >
+              Exportar PDF
+            </button>
+          </div>
+
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-white">
+            <table className="min-w-full">
               <thead>
                 <tr className="text-left">
-                  <th className="py-2 px-4 border-b">Produto</th>
-                  <th className="py-2 px-4 border-b">Código</th>
-                  <th className="py-2 px-4 border-b text-right">Estoque</th>
-                  <th className="py-2 px-4 border-b text-right">Estoque Mínimo</th>
-                  <th className="py-2 px-4 border-b text-center">Alerta</th>
+                  <th className="py-2 px-4">Produto</th>
+                  <th className="py-2 px-4">Código</th>
+                  <th className="py-2 px-4 text-right">Estoque</th>
+                  <th className="py-2 px-4 text-right">Estoque Mínimo</th>
+                  <th className="py-2 px-4 text-center">Alerta</th>
                 </tr>
               </thead>
               <tbody>
-                {estoqueAtual.length === 0 ? (
+                {estoqueAtual.map((p, idx) => (
+                  <tr key={idx}>
+                    <td className="py-2 px-4">{p.produto}</td>
+                    <td className="py-2 px-4">{p.codigo}</td>
+                    <td className="py-2 px-4 text-right">{fmtInt(p.estoque)}</td>
+                    <td className="py-2 px-4 text-right">{fmtInt(p.estoque_minimo)}</td>
+                    <td className="py-2 px-4 text-center">{p.alerta ? 'Baixo' : 'OK'}</td>
+                  </tr>
+                ))}
+                {estoqueAtual.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-3 px-4 text-center text-gray-500">
                       Nenhum produto cadastrado.
                     </td>
                   </tr>
-                ) : (
-                  estoqueAtual.map((p, idx) => (
-                    <tr key={idx}>
-                      <td className="py-2 px-4 border-b">{p.produto}</td>
-                      <td className="py-2 px-4 border-b">{p.codigo}</td>
-                      <td className="py-2 px-4 border-b text-right">{fmtInt(p.estoque)}</td>
-                      <td className="py-2 px-4 border-b text-right">{fmtInt(p.estoque_minimo)}</td>
-                      <td className="py-2 px-4 border-b text-center">
-                        {p.alerta ? (
-                          <span className="text-red-600 font-semibold">Baixo</span>
-                        ) : (
-                          <span className="text-green-600">OK</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
                 )}
               </tbody>
             </table>
@@ -297,36 +383,32 @@ export default function Relatorios() {
         </div>
       )}
 
-      {/* RANKING CLIENTES */}
       {tab === 'ranking' && (
         <>
           <HeaderPeriodo />
-          <div className="bg-white shadow-md rounded px-6 pt-5 pb-6">
+          <div className="bg-white p-6 rounded shadow">
             <h3 className="text-xl font-semibold mb-4">Ranking de Clientes</h3>
             <div className="overflow-x-auto">
-              <table className="min-w-full bg-white">
+              <table className="min-w-full">
                 <thead>
-                  <tr className="text-left">
-                    <th className="py-2 px-4 border-b">Cliente</th>
-                    <th className="py-2 px-4 border-b text-right">Qtde Compras</th>
-                    <th className="py-2 px-4 border-b text-right">Total Gasto (R$)</th>
+                  <tr>
+                    <th>Cliente</th>
+                    <th className="text-right">Qtde Compras</th>
+                    <th className="text-right">Total Gasto</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rankingClientes.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="py-3 px-4 text-center text-gray-500">
-                        Nenhum cliente no período selecionado.
-                      </td>
+                  {rankingClientes.map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{item.cliente}</td>
+                      <td className="text-right">{fmtInt(item.qtd_compras)}</td>
+                      <td className="text-right">{fmtBRL(item.total_gasto)}</td>
                     </tr>
-                  ) : (
-                    rankingClientes.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="py-2 px-4 border-b">{item.cliente}</td>
-                        <td className="py-2 px-4 border-b text-right">{fmtInt(item.qtd_compras)}</td>
-                        <td className="py-2 px-4 border-b text-right">{fmtBRL(item.total_gasto)}</td>
-                      </tr>
-                    ))
+                  ))}
+                  {rankingClientes.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="text-center py-2">Nenhum cliente encontrado.</td>
+                    </tr>
                   )}
                 </tbody>
               </table>

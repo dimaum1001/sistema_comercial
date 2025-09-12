@@ -1,3 +1,4 @@
+// src/pages/layout.jsx
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import api from '../services/api'
@@ -78,6 +79,12 @@ export default function Layout() {
     </div>
   )
 
+  // --- Correção: ler a aba atual de /relatorios para destacar o item certo ---
+  const relatoriosTab = new URLSearchParams(location.search).get('tab') || ''
+  const isRelatorioActive = (tabKey) =>
+    location.pathname.startsWith('/relatorios') && relatoriosTab === tabKey
+  // -------------------------------------------------------------------------
+
   return (
     <div className="min-h-screen flex bg-gray-50">
       {/* Sidebar fixa com rolagem no conteúdo */}
@@ -147,29 +154,29 @@ export default function Layout() {
           <Section id="relatorios" title="Relatórios" icon="📈">
             <button
               type="button"
-              onClick={() => navigate('/relatorios?tab=vendas')}
-              className={subItemCls(location.search.includes('tab=vendas'))}
+              onClick={() => navigate('/relatorios?tab=vendas-resumo')}
+              className={subItemCls(isRelatorioActive('vendas-resumo'))}
             >
               🗓️ Vendas por Período
             </button>
             <button
               type="button"
-              onClick={() => navigate('/relatorios?tab=mais-vendidos')}
-              className={subItemCls(location.search.includes('tab=mais-vendidos'))}
+              onClick={() => navigate('/relatorios?tab=produtos')}
+              className={subItemCls(isRelatorioActive('produtos'))}
             >
               🏆 Produtos Mais Vendidos
             </button>
             <button
               type="button"
               onClick={() => navigate('/relatorios?tab=estoque')}
-              className={subItemCls(location.search.includes('tab=estoque'))}
+              className={subItemCls(isRelatorioActive('estoque'))}
             >
               📦 Estoque Atual
             </button>
             <button
               type="button"
               onClick={() => navigate('/relatorios?tab=ranking')}
-              className={subItemCls(location.search.includes('tab=ranking'))}
+              className={subItemCls(isRelatorioActive('ranking'))}
             >
               👑 Ranking de Clientes
             </button>
