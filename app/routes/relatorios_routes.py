@@ -2,9 +2,9 @@
 from typing import Optional, Tuple, List
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, desc, cast, Date
+from sqlalchemy import func, desc, cast, Date, or_
 
 from app.db.database import get_db
 from app.models.models import Venda, VendaItem, Produto, Cliente
@@ -23,6 +23,22 @@ def _date_range(inicio: Optional[date], fim: Optional[date]) -> Tuple[date, date
     return di, df
 
 
+def _normalize_pagination(
+    page: Optional[int],
+    per_page: Optional[int],
+    limit: Optional[int],
+    offset: Optional[int],
+    max_per_page: int = 200,
+) -> tuple[int, int]:
+    if per_page is not None or page is not None:
+        p = max(1, int(page or 1))
+        pp = min(max_per_page, max(1, int(per_page or max_per_page)))
+        return (pp * (p - 1), pp)
+    lim = min(max_per_page, max(1, int(limit or max_per_page)))
+    off = max(0, int(offset or 0))
+    return (off, lim)
+
+
 # ======================
 # Relatório Resumido
 # ======================
@@ -34,58 +50,84 @@ def vendas_por_periodo(
 ):
     di, df = _date_range(inicio, fim)
 
-    total = (
-        db.query(func.coalesce(func.sum(Venda.total), 0.0))
+    vendas = (
+        db.query(Venda)
+        .options(joinedload(Venda.pagamentos))  # <— importante
         .filter(cast(Venda.data_venda, Date) >= di)
         .filter(cast(Venda.data_venda, Date) < df)
-        .scalar()
+        .all()
     )
 
-    qtd_vendas = (
-        db.query(func.count(Venda.id))
-        .filter(cast(Venda.data_venda, Date) >= di)
-        .filter(cast(Venda.data_venda, Date) < df)
-        .scalar()
-    )
+    total_vendas = float(sum(v.total or 0 for v in vendas))
+    qtd_vendas = len(vendas)
+
+    # somatório por forma
+    formas = {"dinheiro": 0.0, "credito": 0.0, "debito": 0.0, "pix": 0.0, "outros": 0.0}
+    for v in vendas:
+        for p in getattr(v, "pagamentos", []) or []:
+            forma = str(getattr(p, "forma_pagamento", "") or "").lower()
+            valor = float(getattr(p, "valor", 0) or 0)
+            if forma in formas:
+                formas[forma] += valor
+            else:
+                formas["outros"] += valor
 
     return {
         "inicio": di,
         "fim": df - timedelta(days=1),
         "qtd_vendas": int(qtd_vendas or 0),
-        "total_vendas": float(total or 0.0),
+        "total_vendas": float(total_vendas or 0.0),
+        "totais_por_forma": {k: round(v, 2) for k, v in formas.items()},
     }
 
 
 # ======================
-# Relatório Detalhado
+# Relatório Detalhado (Paginado)
 # ======================
 @router.get("/vendas/detalhadas")
 def vendas_detalhadas(
     inicio: Optional[date] = Query(None),
     fim: Optional[date] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
     di, df = _date_range(inicio, fim)
 
-    vendas = (
+    base = (
         db.query(Venda)
         .options(
             joinedload(Venda.cliente),
             joinedload(Venda.itens).joinedload(VendaItem.produto),
+            joinedload(Venda.pagamentos),  # <— importante
         )
         .filter(cast(Venda.data_venda, Date) >= di)
         .filter(cast(Venda.data_venda, Date) < df)
         .order_by(Venda.data_venda.desc())
-        .all()
     )
+
+    total = base.count()
+    vendas = base.offset((page - 1) * per_page).limit(per_page).all()
 
     resultado: List[dict] = []
     for v in vendas:
+        # pagamentos (lista) + formas (apenas rótulos)
+        pagamentos = [
+            {
+                "forma": (p.forma_pagamento or "").lower(),
+                "valor": float(p.valor or 0),
+            }
+            for p in (getattr(v, "pagamentos", []) or [])
+        ]
+        formas_rotulos = sorted(list({(p.get("forma") or "").upper() for p in pagamentos if p.get("forma")}))
+
         resultado.append({
             "id": str(v.id),
             "data_venda": v.data_venda,
             "cliente": v.cliente.nome if v.cliente else "—",
             "total": float(v.total or 0.0),
+            "pagamentos": pagamentos,  # ← agora disponível no front
+            "formas": formas_rotulos,  # ← fallback textual
             "itens": [
                 {
                     "produto": i.produto.nome if i.produto else "—",
@@ -97,12 +139,27 @@ def vendas_detalhadas(
             ],
         })
 
+    # cabeçalhos de paginação
+    start = 0 if total == 0 else (page - 1) * per_page
+    end = 0 if total == 0 else min(start + per_page, total) - 1
+
+    from fastapi import Response
+    resp = Response()
+    resp.headers["X-Total-Count"] = str(total)
+    resp.headers["Content-Range"] = f"items {start}-{end}/{total}"
+
     return resultado
+
 
 
 # ======================
 # Produtos Mais Vendidos
 # ======================
+@router.get("/relatorios/produtos-mais-vendidos")  # compatível com paths antigos
+def _produtos_mais_vendidos_redirect(*args, **kwargs):
+    return produtos_mais_vendidos(*args, **kwargs)
+
+
 @router.get("/produtos-mais-vendidos")
 def produtos_mais_vendidos(
     inicio: Optional[date] = Query(None),
@@ -134,21 +191,41 @@ def produtos_mais_vendidos(
 
 
 # ======================
-# Estoque Atual
+# Estoque Atual (Paginado + Busca)
 # ======================
 @router.get("/estoque-atual")
 def estoque_atual(
-    alerta: Optional[bool] = Query(None, description="Se true, retorna apenas itens abaixo do mínimo"),
+    response: Response,
+    alerta: Optional[bool] = Query(None, description="Se true, apenas itens abaixo do mínimo"),
+    q: Optional[str] = Query(None, description="Busca por nome/código"),
+    # paginação
+    page: Optional[int] = Query(default=None, ge=1),
+    per_page: Optional[int] = Query(default=None, ge=1, le=200),
+    limit: Optional[int] = Query(default=None, ge=1, le=200),
+    offset: Optional[int] = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ):
+    skip, lim = _normalize_pagination(page, per_page, limit, offset)
+
+    base = db.query(
+        Produto.id.label("produto_id"),
+        Produto.nome.label("produto"),
+        Produto.codigo_produto.label("codigo"),
+        Produto.estoque.label("estoque"),
+        Produto.estoque_minimo.label("estoque_minimo"),
+    )
+
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        base = base.filter(or_(Produto.nome.ilike(like), Produto.codigo_produto.ilike(like)))
+
+    # COUNT rápido
+    total = base.with_entities(func.count(Produto.id)).scalar() or 0
+
     rows = (
-        db.query(
-            Produto.id.label("produto_id"),
-            Produto.nome.label("produto"),
-            Produto.codigo_produto.label("codigo"),
-            Produto.estoque.label("estoque"),
-            Produto.estoque_minimo.label("estoque_minimo"),
-        )
+        base.order_by(Produto.nome.asc(), Produto.id.asc())
+        .offset(skip)
+        .limit(lim)
         .all()
     )
 
@@ -160,6 +237,16 @@ def estoque_atual(
 
     if alerta is True:
         data = [x for x in data if x["alerta"]]
+        # quando filtra depois, o total enviado deve refletir o filtro
+        total = len(data)
+
+    # headers de paginação (expostos p/ o browser)
+    start = 0 if total == 0 else skip
+    end = 0 if total == 0 else min(skip + lim, total) - 1
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["Content-Range"] = f"items {start}-{end}/{total}"
+    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count, Content-Range"
+
     return data
 
 

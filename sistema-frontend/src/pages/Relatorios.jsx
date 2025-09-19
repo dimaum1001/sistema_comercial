@@ -1,5 +1,5 @@
 // src/pages/Relatorios.jsx
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import jsPDF from 'jspdf'
@@ -19,21 +19,42 @@ export default function Relatorios() {
   const [tab, setTab] = useState(initialTab)
   const [periodo, setPeriodo] = useState({ inicio: '', fim: '' })
 
-  const [resumoVendas, setResumoVendas] = useState({ qtd_vendas: 0, total_vendas: 0 })
-  const [detalhesVendas, setDetalhesVendas] = useState([])
+  // estados dos dados
+  const [resumoVendas, setResumoVendas] = useState({
+    qtd_vendas: 0,
+    total_vendas: 0,
+    totais_por_forma: { dinheiro: 0, credito: 0, debito: 0, pix: 0, outros: 0 },
+  })
+
+  // vendas detalhadas (paginadas)
+  const [vdItens, setVdItens] = useState([])
+  const [vdPage, setVdPage] = useState(1)
+  const [vdPerPage, setVdPerPage] = useState(25)
+  const [vdTotal, setVdTotal] = useState(0)
+  const [vdLoading, setVdLoading] = useState(false)
+
+  // estoque atual (paginado)
+  const [stkItens, setStkItens] = useState([])
+  const [stkPage, setStkPage] = useState(1)
+  const [stkPerPage, setStkPerPage] = useState(25)
+  const [stkTotal, setStkTotal] = useState(0)
+  const [stkLoading, setStkLoading] = useState(false)
+  const [stkQ, setStkQ] = useState('')
+
+  // outras abas
   const [produtosMaisVendidos, setProdutosMaisVendidos] = useState([])
   const [rankingClientes, setRankingClientes] = useState([])
-  const [estoqueAtual, setEstoqueAtual] = useState([])
 
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
-  const [estoqueLoaded, setEstoqueLoaded] = useState(false)
+  const [estoqueLoadedOnce, setEstoqueLoadedOnce] = useState(false)
 
   useEffect(() => {
     const t = search.get('tab') || 'vendas-resumo'
     setTab(t)
   }, [search])
 
+  // período padrão (mês corrente) + cargas iniciais
   useEffect(() => {
     const today = new Date()
     const first = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -42,46 +63,35 @@ export default function Relatorios() {
     setPeriodo({ inicio, fim })
     ;(async () => {
       await carregarResumoVendas({ inicio, fim })
-      await carregarVendasDetalhadas({ inicio, fim })
+      await fetchVendasDetalhadas({ page: 1, perPage: vdPerPage, periodo: { inicio, fim } })
     })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // entrar na aba estoque → primeira carga
   useEffect(() => {
-    if (tab === 'estoque' && !estoqueLoaded) {
-      carregarEstoque()
+    if (tab === 'estoque' && !estoqueLoadedOnce) {
+      fetchEstoque({ page: 1, perPage: stkPerPage, q: stkQ })
+      setEstoqueLoadedOnce(true)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
-  const handlePeriodoChange = (e) => {
-    setPeriodo((p) => ({ ...p, [e.target.name]: e.target.value }))
-  }
-
-  const pushTab = (t) => {
-    const params = new URLSearchParams(location.search)
-    params.set('tab', t)
-    navigate(`/relatorios?${params.toString()}`, { replace: true })
-  }
-
-  const carregarEstoque = async () => {
-    try {
-      const { data } = await api.get('/relatorios/estoque-atual')
-      const arr = data || []
-      setEstoqueAtual(arr)
-      setEstoqueLoaded(true)
-      return arr // <- retorna dados para uso imediato no PDF
-    } catch (e) {
-      console.error('Erro ao carregar estoque atual:', e)
-      return []
-    }
-  }
-
+  // -------- carregadores --------
   const carregarResumoVendas = async (p) => {
     const useP = p || periodo
     try {
       const { data } = await api.get('/relatorios/vendas', { params: useP })
       setResumoVendas({
         qtd_vendas: Number(data?.qtd_vendas || 0),
-        total_vendas: Number(data?.total_vendas || 0)
+        total_vendas: Number(data?.total_vendas || 0),
+        totais_por_forma: {
+          dinheiro: Number(data?.totais_por_forma?.dinheiro || 0),
+          credito: Number(data?.totais_por_forma?.credito || 0),
+          debito: Number(data?.totais_por_forma?.debito || 0),
+          pix: Number(data?.totais_por_forma?.pix || 0),
+          outros: Number(data?.totais_por_forma?.outros || 0),
+        },
       })
     } catch (e) {
       console.error('Erro ao carregar resumo de vendas:', e)
@@ -89,16 +99,47 @@ export default function Relatorios() {
     }
   }
 
-  const carregarVendasDetalhadas = async (p) => {
-    const useP = p || periodo
+  const fetchVendasDetalhadas = useCallback(async ({ page, perPage, periodo: per }) => {
+    const useP = per || periodo
+    setVdLoading(true)
     try {
-      const { data } = await api.get('/relatorios/vendas/detalhadas', { params: useP })
-      setDetalhesVendas(Array.isArray(data) ? data : [])
+      const resp = await api.get('/relatorios/vendas/detalhadas', {
+        params: { ...useP, page, per_page: perPage }
+      })
+      const total = Number(resp.headers['x-total-count'] || 0)
+      setVdItens(Array.isArray(resp.data) ? resp.data : [])
+      setVdTotal(total)
+      setVdPage(page)
+      setVdPerPage(perPage)
     } catch (e) {
       console.error('Erro ao carregar vendas detalhadas:', e)
-      setDetalhesVendas([])
+      setVdItens([])
+      setVdTotal(0)
+    } finally {
+      setVdLoading(false)
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodo.inicio, periodo.fim])
+
+  const fetchEstoque = useCallback(async ({ page, perPage, q }) => {
+    setStkLoading(true)
+    try {
+      const resp = await api.get('/relatorios/estoque-atual', {
+        params: { page, per_page: perPage, q: q || undefined }
+      })
+      const total = Number(resp.headers['x-total-count'] || 0)
+      setStkItens(Array.isArray(resp.data) ? resp.data : [])
+      setStkTotal(total)
+      setStkPage(page)
+      setStkPerPage(perPage)
+    } catch (e) {
+      console.error('Erro ao carregar estoque atual:', e)
+      setStkItens([])
+      setStkTotal(0)
+    } finally {
+      setStkLoading(false)
+    }
+  }, [])
 
   const carregarOutrosRelatorios = async (p) => {
     const useP = p || periodo
@@ -124,16 +165,16 @@ export default function Relatorios() {
     try {
       await Promise.all([
         carregarResumoVendas(),
-        carregarVendasDetalhadas(),
+        fetchVendasDetalhadas({ page: 1, perPage: vdPerPage }),
         carregarOutrosRelatorios()
       ])
-      if (tab === 'estoque') await carregarEstoque()
+      if (tab === 'estoque') await fetchEstoque({ page: 1, perPage: stkPerPage, q: stkQ })
     } finally {
       setLoading(false)
     }
   }
 
-  // === Exportação para PDF (agora cobre Estoque e garante dados carregados) ===
+  // -------- PDF --------
   const exportarPDF = async () => {
     const doc = new jsPDF()
     const titulos = {
@@ -151,22 +192,37 @@ export default function Relatorios() {
     const startY = 28
 
     if (tab === 'vendas-resumo') {
+      const f = resumoVendas.totais_por_forma || {}
       autoTable(doc, {
         startY,
         head: [['Métrica', 'Valor']],
         body: [
           ['Quantidade de Vendas', fmtInt(resumoVendas.qtd_vendas)],
-          ['Total do Período', fmtBRL(resumoVendas.total_vendas)]
+          ['Total do Período', fmtBRL(resumoVendas.total_vendas)],
+        ]
+      })
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [['Forma de Pagamento', 'Total']],
+        body: [
+          ['Dinheiro', fmtBRL(f.dinheiro || 0)],
+          ['Crédito', fmtBRL(f.credito || 0)],
+          ['Débito', fmtBRL(f.debito || 0)],
+          ['PIX', fmtBRL(f.pix || 0)],
+          ['Outros', fmtBRL(f.outros || 0)],
         ]
       })
     } else if (tab === 'vendas-detalhadas') {
       autoTable(doc, {
         startY,
-        head: [['Data', 'Cliente', 'Total', 'Itens']],
-        body: detalhesVendas.map((v) => [
+        head: [['Data', 'Cliente', 'Total', 'Pagamento(s)', 'Itens']],
+        body: vdItens.map((v) => [
           v.data_venda,
           v.cliente || '—',
           fmtBRL(v.total),
+          (v.pagamentos?.length
+            ? v.pagamentos.map(p => `${(p.forma || p.forma_pagamento || '').toUpperCase()} ${fmtBRL(p.valor)}`).join(' + ')
+            : (v.formas?.join(', ').toUpperCase() || '—')),
           v.itens?.map((i) => `${i.produto} (x${i.quantidade})`).join(', ')
         ])
       })
@@ -182,12 +238,10 @@ export default function Relatorios() {
         ])
       })
     } else if (tab === 'estoque') {
-      // garante ter dados do estoque; usa retorno imediato para montar a tabela
-      const dataEstoque = estoqueLoaded ? estoqueAtual : await carregarEstoque()
       autoTable(doc, {
         startY,
         head: [['Produto', 'Código', 'Estoque', 'Estoque Mínimo', 'Alerta']],
-        body: (dataEstoque || []).map((p) => [
+        body: (stkItens || []).map((p) => [
           p.produto,
           p.codigo ?? '—',
           fmtInt(p.estoque),
@@ -209,7 +263,50 @@ export default function Relatorios() {
 
     doc.save(`relatorio-${tab}.pdf`)
   }
-  // === fim exportação ===
+
+  // -------- UI helpers --------
+  const handlePeriodoChange = (e) => {
+    setPeriodo((p) => ({ ...p, [e.target.name]: e.target.value }))
+  }
+
+  const pushTab = (t) => {
+    const params = new URLSearchParams(location.search)
+    params.set('tab', t)
+    navigate(`/relatorios?${params.toString()}`, { replace: true })
+  }
+
+  // componentes pequenos
+  const TopPager = ({ page, perPage, total, onPrev, onNext, onPerPage }) => {
+    const showing = Math.min(perPage, Math.max(total - (page - 1) * perPage, 0))
+    const totalPages = Math.max(1, Math.ceil(total / perPage))
+    const canPrev = page > 1
+    const canNext = page < totalPages
+    return (
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span>Mostrar</span>
+          <select
+            value={perPage}
+            onChange={(e) => onPerPage(Number(e.target.value))}
+            className="border rounded px-2 py-1"
+          >
+            {[10, 25, 50, 100, 200].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          <span>por página</span>
+          <span className="ml-4">
+            Página <b>{page}</b> — mostrando <b>{showing}</b> de <b>{Math.max(totalPages, 1)}</b>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={onPrev} disabled={!canPrev} className={`px-3 py-1 rounded border ${canPrev ? 'bg-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>Anterior</button>
+          <button onClick={onNext} disabled={!canNext} className={`px-3 py-1 rounded border ${canNext ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>Próxima</button>
+          <button onClick={exportarPDF} className="ml-2 px-3 py-1 rounded bg-green-600 text-white">PDF</button>
+        </div>
+      </div>
+    )
+  }
 
   const HeaderPeriodo = () => (
     <div className="bg-white shadow-md rounded px-6 pt-5 pb-6 mb-6">
@@ -249,10 +346,28 @@ export default function Relatorios() {
       {tab === 'vendas-resumo' && (
         <>
           <HeaderPeriodo />
-          <div className="bg-white p-6 rounded shadow">
-            <h3 className="text-xl font-semibold mb-4">Resumo de Vendas</h3>
-            <p>Total de vendas: {fmtInt(resumoVendas.qtd_vendas)}</p>
-            <p>Valor total: {fmtBRL(resumoVendas.total_vendas)}</p>
+          <div className="bg-white p-6 rounded shadow space-y-4">
+            <h3 className="text-xl font-semibold">Resumo de Vendas</h3>
+            <div>Total de vendas: {fmtInt(resumoVendas.qtd_vendas)}</div>
+            <div>Valor total: {fmtBRL(resumoVendas.total_vendas)}</div>
+
+            <div className="mt-4">
+              <h4 className="font-semibold mb-2">Por forma de pagamento</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  ['Dinheiro', resumoVendas.totais_por_forma.dinheiro],
+                  ['Crédito', resumoVendas.totais_por_forma.credito],
+                  ['Débito', resumoVendas.totais_por_forma.debito],
+                  ['PIX', resumoVendas.totais_por_forma.pix],
+                  ['Outros', resumoVendas.totais_por_forma.outros],
+                ].map(([label, val]) => (
+                  <div key={label} className="border rounded p-3 flex items-center justify-between">
+                    <span>{label}</span>
+                    <strong>{fmtBRL(val)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -261,7 +376,14 @@ export default function Relatorios() {
         <>
           <HeaderPeriodo />
           <div className="bg-white p-6 rounded shadow">
-            <h3 className="text-xl font-semibold mb-4">Vendas Detalhadas</h3>
+            <TopPager
+              page={vdPage}
+              perPage={vdPerPage}
+              total={vdTotal}
+              onPrev={() => vdPage > 1 && fetchVendasDetalhadas({ page: vdPage - 1, perPage: vdPerPage })}
+              onNext={() => vdPage < Math.ceil(vdTotal / vdPerPage) && fetchVendasDetalhadas({ page: vdPage + 1, perPage: vdPerPage })}
+              onPerPage={(n) => fetchVendasDetalhadas({ page: 1, perPage: n })}
+            />
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -269,15 +391,25 @@ export default function Relatorios() {
                     <th className="text-left py-2 px-3">Data</th>
                     <th className="text-left py-2 px-3">Cliente</th>
                     <th className="text-right py-2 px-3">Total</th>
+                    <th className="text-left py-2 px-3">Pagamento(s)</th>
                     <th className="text-left py-2 px-3">Itens</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {detalhesVendas.map((v, idx) => (
-                    <tr key={idx} className="border-t">
+                  {vdItens.map((v) => (
+                    <tr key={v.id} className="border-top">
                       <td className="py-2 px-3">{v.data_venda}</td>
                       <td className="py-2 px-3">{v.cliente || '—'}</td>
                       <td className="py-2 px-3 text-right">{fmtBRL(v.total)}</td>
+                      <td className="py-2 px-3">
+                        {v.pagamentos?.length
+                          ? v.pagamentos.map((p, ix) => (
+                              <div key={ix}>
+                                {(p.forma || p.forma_pagamento || '').toUpperCase()} — {fmtBRL(p.valor)}
+                              </div>
+                            ))
+                          : (v.formas?.join(', ').toUpperCase() || '—')}
+                      </td>
                       <td className="py-2 px-3">
                         {v.itens?.map((i, ix) => (
                           <div key={ix}>{i.produto} (x{i.quantidade})</div>
@@ -285,9 +417,9 @@ export default function Relatorios() {
                       </td>
                     </tr>
                   ))}
-                  {detalhesVendas.length === 0 && (
+                  {!vdLoading && vdItens.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="text-center py-4 text-gray-500">
+                      <td colSpan={5} className="text-center py-4 text-gray-500">
                         Nenhuma venda encontrada neste período.
                       </td>
                     </tr>
@@ -337,16 +469,25 @@ export default function Relatorios() {
 
       {tab === 'estoque' && (
         <div className="bg-white p-6 rounded shadow">
-          {/* Topo com botão de PDF nesta tela */}
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold">Estoque Atual</h3>
-            <button
-              onClick={exportarPDF}
-              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded"
-              aria-label="Exportar estoque em PDF"
-            >
-              Exportar PDF
-            </button>
+          <TopPager
+            page={stkPage}
+            perPage={stkPerPage}
+            total={stkTotal}
+            onPrev={() => stkPage > 1 && fetchEstoque({ page: stkPage - 1, perPage: stkPerPage, q: stkQ })}
+            onNext={() => stkPage < Math.ceil(stkTotal / stkPerPage) && fetchEstoque({ page: stkPage + 1, perPage: stkPerPage, q: stkQ })}
+            onPerPage={(n) => fetchEstoque({ page: 1, perPage: n, q: stkQ })}
+          />
+
+          <div className="mb-3">
+            <input
+              className="border rounded px-3 py-2 w-full md:w-96"
+              placeholder="Buscar por nome/código…"
+              value={stkQ}
+              onChange={(e) => setStkQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') fetchEstoque({ page: 1, perPage: stkPerPage, q: e.currentTarget.value })
+              }}
+            />
           </div>
 
           <div className="overflow-x-auto">
@@ -361,8 +502,8 @@ export default function Relatorios() {
                 </tr>
               </thead>
               <tbody>
-                {estoqueAtual.map((p, idx) => (
-                  <tr key={idx}>
+                {stkItens.map((p) => (
+                  <tr key={p.produto_id}>
                     <td className="py-2 px-4">{p.produto}</td>
                     <td className="py-2 px-4">{p.codigo}</td>
                     <td className="py-2 px-4 text-right">{fmtInt(p.estoque)}</td>
@@ -370,10 +511,10 @@ export default function Relatorios() {
                     <td className="py-2 px-4 text-center">{p.alerta ? 'Baixo' : 'OK'}</td>
                   </tr>
                 ))}
-                {estoqueAtual.length === 0 && (
+                {!stkLoading && stkItens.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-3 px-4 text-center text-gray-500">
-                      Nenhum produto cadastrado.
+                      Nenhum produto encontrado.
                     </td>
                   </tr>
                 )}

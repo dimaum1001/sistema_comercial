@@ -1,7 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, date
 from uuid import UUID
+from pydantic import ConfigDict
 
 # ========================
 # Base Produto
@@ -22,17 +23,12 @@ class ProdutoBase(BaseModel):
     categoria_id: Optional[UUID] = None
     fornecedor_id: Optional[UUID] = None
 
-
 class ProdutoCreate(ProdutoBase):
-    # nome é obrigatório para criação
     nome: str
-    # opcional, pois há histórico em PrecoProduto; também é salvo em cache em Produto
     preco_venda: Optional[float] = None
-
 
 class ProdutoUpdate(ProdutoBase):
     preco_venda: Optional[float] = None
-
 
 # ========================
 # Produto Resumido (uso em Preço)
@@ -40,10 +36,7 @@ class ProdutoUpdate(ProdutoBase):
 class ProdutoResumo(BaseModel):
     id: UUID
     nome: str
-
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 # ========================
 # Histórico de Preços
@@ -53,7 +46,6 @@ class PrecoProdutoCreate(BaseModel):
     preco: float
     ativo: Optional[bool] = True
 
-
 class PrecoProdutoOut(BaseModel):
     id: UUID
     produto_id: UUID
@@ -62,10 +54,7 @@ class PrecoProdutoOut(BaseModel):
     data_fim: Optional[datetime] = None
     ativo: bool
     produto: Optional[ProdutoResumo]  # inclui dados básicos do produto
-
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 # ========================
 # Fornecedor (uso em ProdutoOut)
@@ -73,26 +62,36 @@ class PrecoProdutoOut(BaseModel):
 class FornecedorOut(BaseModel):
     id: UUID
     nome: str
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        from_attributes = True
-
+# (Opcional) Categoria no output, se você quiser expor o objeto também
+class CategoriaOut(BaseModel):
+    id: UUID
+    nome: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 # ========================
 # Produto com relacionamentos
 # ========================
 class ProdutoOut(ProdutoBase):
     id: UUID
-    # garantir que aparece no output
     codigo_produto: str
     preco_venda: Optional[float]
     criado_em: datetime
     atualizado_em: datetime
-    # OBS: no seu modelo SQLAlchemy a relação chama-se fornecedor_obj.
-    # Se quiser que aqui seja "fornecedor", mantenha assim e ajuste o modelo
-    # para expor um @property fornecedor ou um relationship com esse nome.
-    fornecedor: Optional[FornecedorOut] = None
-    precos: List[PrecoProdutoOut] = []
 
-    class Config:
-        from_attributes = True
+    # ✅ Pegamos a relação ORM `fornecedor_obj` e serializamos como "fornecedor"
+    fornecedor_obj: Optional[FornecedorOut] = Field(
+        default=None,
+        serialization_alias="fornecedor"
+    )
+
+    # (Opcional) Se sua relação chama `categoria`, serialize como "categoria"
+    # categoria: Optional[CategoriaOut] = None
+    # Se no ORM o nome for `categoria` está ok; se for `categoria_obj`, use:
+    # categoria_obj: Optional[CategoriaOut] = Field(default=None, serialization_alias="categoria")
+
+    # Evitar lista mutável como default
+    precos: List[PrecoProdutoOut] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)

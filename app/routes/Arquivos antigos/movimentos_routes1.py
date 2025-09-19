@@ -1,27 +1,15 @@
-"""
-Rotas para movimentações de estoque.
-
-Permite registrar entradas, saídas e ajustes de estoque e listar os
-movimentos cadastrados. A listagem agora aceita parâmetros ``skip`` e
-``limit`` para paginação e utiliza eager loading para trazer informações
-relacionadas ao produto e seu fornecedor.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from typing import List
-
 from app.db.database import get_db
 from app.models.models import MovimentoEstoque, Produto
 from app.schemas.movimento_schema import MovimentoCreate, MovimentoResponse
-
+from typing import List
 
 router = APIRouter()
 
 
 @router.post("/estoque/movimentar", response_model=MovimentoResponse)
-def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)) -> MovimentoEstoque:
-    """Aplica um movimento de estoque para um produto (entrada, saída ou ajuste)."""
+def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)):
     produto = db.query(Produto).filter(Produto.id == movimento.produto_id).first()
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
@@ -47,6 +35,7 @@ def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)
         quantidade=movimento.quantidade,
         observacao=movimento.observacao
     )
+
     db.add(novo_movimento)
     db.commit()
     db.refresh(novo_movimento)
@@ -54,18 +43,17 @@ def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)
 
 
 @router.get("/estoque/movimentos", response_model=List[MovimentoResponse])
-def listar_movimentos(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)) -> List[MovimentoEstoque]:
-    """Lista movimentos de estoque em ordem decrescente de data.
-
-    Eager‑load do produto e do fornecedor relacionado. Permite paginação
-    através dos parâmetros ``skip`` e ``limit``.
+def listar_movimentos(db: Session = Depends(get_db)):
     """
-    query = (
+    Eager-load do produto e do fornecedor RELACIONADO.
+    IMPORTANTE: usar Produto.fornecedor_obj (relationship), NÃO Produto.fornecedor (coluna string).
+    """
+    return (
         db.query(MovimentoEstoque)
         .options(
-            joinedload(MovimentoEstoque.produto).joinedload(Produto.fornecedor_obj)
+            joinedload(MovimentoEstoque.produto)
+            .joinedload(Produto.fornecedor_obj)
         )
         .order_by(MovimentoEstoque.data_movimento.desc())
+        .all()
     )
-    movimentos = query.offset(skip).limit(limit).all()
-    return movimentos

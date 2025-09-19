@@ -1,10 +1,11 @@
 """
 Rotas para gerenciamento de contas a pagar.
 
-Define operações CRUD sobre ``ContaPagar``, com listagem paginada e
-substituição do método depreciado ``db.query(...).get()`` pelo método
-recomendado ``db.get()`` do SQLAlchemy 2.x. A listagem retorna todas as
-contas a pagar existentes de forma paginada.
+Este módulo define as operações CRUD para o modelo ContaPagar. As rotas
+são registradas em um APIRouter com prefixo ``/contas-pagar`` e tag
+``Contas a Pagar``. Elas permitem listar todas as contas, buscar uma
+conta específica, criar novas contas, atualizar campos existentes e
+marcar uma conta como paga.
 """
 
 import uuid
@@ -26,15 +27,15 @@ router = APIRouter(prefix="/contas-pagar", tags=["Contas a Pagar"])
 
 
 @router.get("/", response_model=List[ContaPagarSchema])
-def listar_contas(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)) -> List[models.ContaPagar]:
-    """Retorna todas as contas a pagar cadastradas com suporte a paginação."""
-    return db.query(models.ContaPagar).offset(skip).limit(limit).all()
+def listar_contas(db: Session = Depends(get_db)) -> List[models.ContaPagar]:
+    """Retorna todas as contas a pagar cadastradas."""
+    return db.query(models.ContaPagar).all()
 
 
 @router.get("/{conta_id}", response_model=ContaPagarSchema)
 def obter_conta(conta_id: uuid.UUID, db: Session = Depends(get_db)) -> models.ContaPagar:
     """Retorna uma conta a pagar específica pelo ID."""
-    conta = db.get(models.ContaPagar, conta_id)
+    conta = db.query(models.ContaPagar).get(conta_id)
     if not conta:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada")
     return conta
@@ -51,13 +52,17 @@ def criar_conta(conta: ContaPagarCreate, db: Session = Depends(get_db)) -> model
 
 
 @router.put("/{conta_id}", response_model=ContaPagarSchema)
-def atualizar_conta(conta_id: uuid.UUID, conta_update: ContaPagarUpdate, db: Session = Depends(get_db)) -> models.ContaPagar:
+def atualizar_conta(
+    conta_id: uuid.UUID, conta_update: ContaPagarUpdate, db: Session = Depends(get_db)
+) -> models.ContaPagar:
     """Atualiza os campos de uma conta a pagar existente."""
-    conta = db.get(models.ContaPagar, conta_id)
+    conta = db.query(models.ContaPagar).get(conta_id)
     if not conta:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada")
+
     for campo, valor in conta_update.dict(exclude_unset=True).items():
         setattr(conta, campo, valor)
+
     db.commit()
     db.refresh(conta)
     return conta
@@ -66,7 +71,7 @@ def atualizar_conta(conta_id: uuid.UUID, conta_update: ContaPagarUpdate, db: Ses
 @router.delete("/{conta_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remover_conta(conta_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
     """Remove uma conta a pagar do banco de dados."""
-    conta = db.get(models.ContaPagar, conta_id)
+    conta = db.query(models.ContaPagar).get(conta_id)
     if not conta:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conta não encontrada")
     db.delete(conta)

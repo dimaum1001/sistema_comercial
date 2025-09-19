@@ -1,13 +1,3 @@
-"""
-Rotas para gerenciamento de preços de produtos.
-
-Permite listar, criar e deletar registros de preços (`PrecoProduto`). A
-listagem suporta filtro por ``produto_id`` e agora também aceita paginação
-via ``skip`` e ``limit``. Ao criar um novo preço, os preços anteriores
-relacionados ao produto são desativados e o campo ``preco_venda`` do produto
-é atualizado.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -18,31 +8,31 @@ from app.db.database import get_db
 from app.models.models import PrecoProduto, Produto
 from app.schemas.produto_schema import PrecoProdutoCreate, PrecoProdutoOut
 
-
 router = APIRouter(prefix="/precos", tags=["Preços de Produtos"])
 
 
+# ========================
+# Listar todos preços ou apenas de um produto
+# ========================
 @router.get("/", response_model=List[PrecoProdutoOut])
-def listar_precos(
-    produto_id: Optional[UUID] = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-) -> List[PrecoProduto]:
-    """Lista preços, podendo filtrar por produto e paginar os resultados."""
+def listar_precos(produto_id: Optional[UUID] = None, db: Session = Depends(get_db)):
     query = db.query(PrecoProduto)
     if produto_id:
         query = query.filter(PrecoProduto.produto_id == produto_id)
-    precos = query.order_by(PrecoProduto.data_inicio.desc()).offset(skip).limit(limit).all()
-    # força carregar relacionamento produto
+    precos = query.order_by(PrecoProduto.data_inicio.desc()).all()
+
+    # força carregar relacionamento
     for p in precos:
         _ = p.produto
+
     return precos
 
 
+# ========================
+# Criar um novo preço
+# ========================
 @router.post("/", response_model=PrecoProdutoOut)
-def criar_preco(payload: PrecoProdutoCreate, db: Session = Depends(get_db)) -> PrecoProduto:
-    """Cria um novo registro de preço para um produto, desativando preços ativos anteriores."""
+def criar_preco(payload: PrecoProdutoCreate, db: Session = Depends(get_db)):
     produto = db.query(Produto).filter(Produto.id == payload.produto_id).first()
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
@@ -62,21 +52,26 @@ def criar_preco(payload: PrecoProdutoCreate, db: Session = Depends(get_db)) -> P
         ativo=bool(payload.ativo)
     )
     db.add(novo)
+
     # mantém cache no produto
     produto.preco_venda = payload.preco
     db.add(produto)
+
     db.commit()
     db.refresh(novo)
-    _ = novo.produto  # força carregar produto
+    _ = novo.produto  # 🔹 força carregar produto
     return novo
 
 
+# ========================
+# Deletar preço
+# ========================
 @router.delete("/{preco_id}")
 def deletar_preco(preco_id: UUID, db: Session = Depends(get_db)):
-    """Deleta um preço pelo seu identificador."""
     preco = db.query(PrecoProduto).filter(PrecoProduto.id == preco_id).first()
     if not preco:
         raise HTTPException(status_code=404, detail="Preço não encontrado")
+
     db.delete(preco)
     db.commit()
     return {"detail": "Preço excluído com sucesso"}

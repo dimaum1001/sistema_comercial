@@ -1,87 +1,55 @@
-"""
-Rotas para gerenciamento de usuários.
-
-Este módulo define endpoints CRUD para o modelo ``Usuario``. Inclui funções
-para listar, criar, atualizar e deletar usuários, além de dependências para
-obter a sessão do banco de dados e validar o token do usuário autenticado.
-
-Principais melhorias em relação à versão original:
-
-* A listagem de usuários agora suporta paginação via parâmetros ``skip`` e
-  ``limit`` para evitar carregamento excessivo de dados.
-* O carregamento de configurações de autenticação continua baseado em
-  ``verificar_token`` importado de ``app.auth.auth_handler``.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-
 from app.db.database import SessionLocal
 from app.models.models import Usuario
 from app.schemas.usuario_schema import UsuarioCreate, UsuarioOut
 from app.auth.auth_handler import verificar_token
 from passlib.hash import bcrypt
 
-
 router = APIRouter()
 
-
-def get_db() -> Session:
-    """Obtém uma nova sessão de banco de dados usando SessionLocal.
-
-    A sessão é fechada automaticamente após o fim da requisição.
-    """
+# Dependência de banco
+def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-
-def get_usuario_autenticado(token: dict = Depends(verificar_token), db: Session = Depends(get_db)) -> Usuario:
-    """Valida o token e retorna o usuário autenticado.
-
-    Levanta HTTPException se o token for inválido ou o usuário não existir.
-    """
+# Dependência para validar token e retornar usuário autenticado
+def get_usuario_autenticado(token: str = Depends(verificar_token), db: Session = Depends(get_db)):
     if not token or "sub" not in token:
         raise HTTPException(status_code=401, detail="Token inválido ou expirado")
+
     usuario = db.query(Usuario).filter(Usuario.id == token["sub"]).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     return usuario
 
-
-def somente_admin(usuario: Usuario = Depends(get_usuario_autenticado)) -> Usuario:
-    """Verifica se o usuário autenticado possui perfil de administrador."""
+# Verifica se é admin
+def somente_admin(usuario: Usuario = Depends(get_usuario_autenticado)):
     if usuario.tipo != "admin":
         raise HTTPException(status_code=403, detail="Apenas administradores podem acessar")
     return usuario
 
 
+# 📌 Listar usuários
 @router.get("/usuarios", response_model=List[UsuarioOut])
-def listar_usuarios(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Lista usuários com suporte a paginação.
+def listar_usuarios(db: Session = Depends(get_db)):
 
-    :param skip: quantidade de registros a pular (offset)
-    :param limit: número máximo de registros a retornar
-    """
-    return db.query(Usuario).offset(skip).limit(limit).all()
+    return db.query(Usuario).all()
 
 
-@router.post("/usuarios", response_model=UsuarioOut, status_code=status.HTTP_201_CREATED)
+# 📌 Criar usuário (admin pode criar qualquer tipo)
+@router.post("/usuarios", response_model=UsuarioOut, status_code=201)
 def criar_usuario(usuario: UsuarioCreate, db: Session = Depends(get_db)):
-    """Cria um novo usuário.
-
-    O primeiro usuário cadastrado recebe automaticamente o tipo ``admin``.
-    """
     # se não existir nenhum usuário, o primeiro sempre será admin
     if db.query(Usuario).count() == 0:
         tipo = "admin"
     else:
         tipo = usuario.tipo.strip().lower()
 
-    # valida e‑mail duplicado
     if db.query(Usuario).filter(Usuario.email == usuario.email).first():
         raise HTTPException(status_code=400, detail="Email já registrado")
 
@@ -97,12 +65,10 @@ def criar_usuario(usuario: UsuarioCreate, db: Session = Depends(get_db)):
     return novo_usuario
 
 
+
+# 📌 Atualizar usuário
 @router.put("/usuarios/{usuario_id}", response_model=UsuarioOut)
 def atualizar_usuario(usuario_id: str, usuario_dados: UsuarioCreate, db: Session = Depends(get_db), admin: Usuario = Depends(somente_admin)):
-    """Atualiza os dados de um usuário existente.
-
-    Apenas administradores podem atualizar usuários.
-    """
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
@@ -117,15 +83,13 @@ def atualizar_usuario(usuario_id: str, usuario_dados: UsuarioCreate, db: Session
     return usuario
 
 
-@router.delete("/usuarios/{usuario_id}", status_code=status.HTTP_204_NO_CONTENT)
+# 📌 Deletar usuário
+@router.delete("/usuarios/{usuario_id}", status_code=204)
 def deletar_usuario(usuario_id: str, db: Session = Depends(get_db), admin: Usuario = Depends(somente_admin)):
-    """Remove um usuário do banco de dados.
-
-    Apenas administradores podem excluir usuários.
-    """
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
     db.delete(usuario)
     db.commit()
     return {"detail": "Usuário removido com sucesso"}

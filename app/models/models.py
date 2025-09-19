@@ -7,6 +7,7 @@ Caso você tenha campos adicionais no arquivo original, integre-os conforme nece
 """
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     String,
     Numeric,
@@ -210,32 +211,62 @@ class Endereco(Base):
 class Fornecedor(Base):
     __tablename__ = "fornecedores"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # Código legível de fornecedor (ex.: FOR-0001)
-    codigo_fornecedor = Column(String(20), unique=True, nullable=False)
-    nome = Column(String, nullable=False)
-    cnpj_cpf = Column(String, unique=True, nullable=False)
-    inscricao_estadual = Column(String, nullable=True)
-    telefone = Column(String, nullable=True)
-    email = Column(String, nullable=True)
-    site = Column(String, nullable=True)
-    logradouro = Column(String, nullable=True)
-    numero = Column(String, nullable=True)
-    complemento = Column(String, nullable=True)
-    bairro = Column(String, nullable=True)
-    cidade = Column(String, nullable=True)
-    estado = Column(String, nullable=True)
-    cep = Column(String, nullable=True)
-    pais = Column(String, default="Brasil")
-    contato_nome = Column(String, nullable=True)
-    contato_cargo = Column(String, nullable=True)
-    contato_email = Column(String, nullable=True)
-    contato_telefone = Column(String, nullable=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # <-- default adicionado
+    codigo_fornecedor = Column(String, nullable=False, unique=True)
+    tipo_pessoa = Column(CHAR(1), nullable=False, default="J")  # 'F' ou 'J'
+    razao_social = Column(String, nullable=False)
+    nome = Column(String, nullable=False)  # fantasia/abreviado
+    cnpj_cpf = Column(String)
+    inscricao_estadual = Column(String)
+    telefone = Column(String)
+    email = Column(String)
+    site = Column(String)
+    contato_nome = Column(String)
+    contato_cargo = Column(String)
+    contato_email = Column(String)
+    contato_telefone = Column(String)
     criado_em = Column(DateTime, default=datetime.utcnow)
     atualizado_em = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    produtos = relationship("Produto", back_populates="fornecedor_obj")
-    contas_pagar = relationship("ContaPagar", back_populates="fornecedor")
+    enderecos = relationship(
+        "EnderecoFornecedor",
+        back_populates="fornecedor",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    produtos = relationship(
+        "Produto",
+        back_populates="fornecedor_obj",
+        lazy="selectin",
+    )
+    contas_pagar = relationship(
+        "ContaPagar",
+        back_populates="fornecedor",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        CheckConstraint("tipo_pessoa IN ('F','J')", name="ck_fornecedor_tipo_pessoa"),
+    )
+
+class EnderecoFornecedor(Base):
+    __tablename__ = "enderecos_fornecedores"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # <-- default adicionado
+    fornecedor_id = Column(UUID(as_uuid=True), ForeignKey("fornecedores.id", ondelete="CASCADE"), nullable=False)
+    tipo_endereco = Column(String)
+    logradouro = Column(String)
+    numero = Column(String)
+    complemento = Column(String)
+    bairro = Column(String)
+    cidade = Column(String)
+    estado = Column(CHAR(2))
+    cep = Column(String)
+    pais = Column(String)
+    criado_em = Column(DateTime, default=datetime.utcnow)
+
+    fornecedor = relationship("Fornecedor", back_populates="enderecos")
 
 
 class ContaPagar(Base):

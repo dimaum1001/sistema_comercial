@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch } from 'react-icons/fi'
@@ -7,9 +7,18 @@ export default function Clientes() {
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // paginação
+  const [pageSize, setPageSize] = useState(25) // 10, 25, 50, 100
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+
+  // total geral (tabela inteira no banco)
+  const [totalCount, setTotalCount] = useState(null)
+
   const navigate = useNavigate()
 
-  useEffect(() => {
+  const fetchClientes = useCallback(async () => {
     const token = localStorage.getItem('token')
 
     if (!token) {
@@ -17,44 +26,106 @@ export default function Clientes() {
       return
     }
 
-    const fetchClientes = async () => {
-      try {
-        const response = await api.get('/clientes', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-        setClientes(response.data)
-      } catch (err) {
-        console.error('Erro ao buscar clientes:', err)
-      } finally {
-        setLoading(false)
+    setLoading(true)
+    try {
+      const skip = (page - 1) * pageSize
+      const limitPlusOne = pageSize + 1
+
+      const response = await api.get('/clientes', {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { skip, limit: limitPlusOne },
+      })
+
+      const data = Array.isArray(response.data) ? response.data : []
+      if (data.length > pageSize) {
+        setHasMore(true)
+        setClientes(data.slice(0, pageSize))
+      } else {
+        setHasMore(false)
+        setClientes(data)
       }
+    } catch (err) {
+      console.error('Erro ao buscar clientes:', err)
+      setHasMore(false)
+      setClientes([])
+    } finally {
+      setLoading(false)
     }
+  }, [navigate, page, pageSize])
 
+  // Conta o total geral com várias requisições (robusto, sem depender de headers)
+  const fetchTotal = useCallback(async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    try {
+      const chunk = 1000
+      let skip = 0
+      let total = 0
+
+      // guarda para evitar loop infinito em caso de erro de backend
+      for (let guard = 0; guard < 200; guard++) {
+        const resp = await api.get('/clientes', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { skip, limit: chunk },
+        })
+        const arr = Array.isArray(resp.data) ? resp.data : []
+        total += arr.length
+        if (arr.length < chunk) break
+        skip += chunk
+      }
+
+      setTotalCount(total)
+    } catch (e) {
+      console.error('Erro ao obter total de clientes:', e)
+      setTotalCount(null)
+    }
+  }, [])
+
+  useEffect(() => {
     fetchClientes()
-  }, [navigate])
+  }, [fetchClientes])
 
-  const filteredClientes = clientes.filter(cliente =>
-    cliente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cliente.cpf.includes(searchTerm) ||
-    cliente.telefone.includes(searchTerm)
-  )
+  useEffect(() => {
+    fetchTotal()
+  }, [fetchTotal])
+
+  const filteredClientes = clientes.filter((cliente) => {
+    const nome = (cliente.nome || '').toLowerCase()
+    const cpf = (cliente.cpf || cliente.cpf_cnpj || '').toLowerCase()
+    const tel = (cliente.telefone || '').toLowerCase()
+    const termo = searchTerm.toLowerCase()
+    return nome.includes(termo) || cpf.includes(termo) || tel.includes(termo)
+  })
 
   const handleDelete = async (id) => {
     if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
       try {
         const token = localStorage.getItem('token')
         await api.delete(`/clientes/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         })
-        setClientes(clientes.filter(cliente => cliente.id !== id))
+        // recarrega a página atual e o total geral
+        fetchClientes()
+        fetchTotal()
       } catch (err) {
         console.error('Erro ao excluir cliente:', err)
       }
     }
+  }
+
+  const handlePrev = () => {
+    if (page > 1) setPage((p) => p - 1)
+  }
+
+  const handleNext = () => {
+    if (hasMore) setPage((p) => p + 1)
+  }
+
+  const handlePageSizeChange = (e) => {
+    const newSize = Number(e.target.value)
+    setPageSize(newSize)
+    setPage(1) // volta para a primeira página ao mudar o tamanho
   }
 
   if (loading) {
@@ -70,9 +141,26 @@ export default function Clientes() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-3">
         <h2 className="text-2xl font-bold text-gray-800">Clientes Cadastrados</h2>
-        <div className="flex space-x-4">
+
+        <div className="flex items-center gap-3">
+          {/* seletor de quantidade por página */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Mostrar</label>
+            <select
+              value={pageSize}
+              onChange={handlePageSizeChange}
+              className="border border-gray-300 rounded-md text-sm px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span className="text-sm text-gray-600">por página</span>
+          </div>
+
           <button
             onClick={() => navigate('/dashboard')}
             className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
@@ -97,7 +185,7 @@ export default function Clientes() {
         </div>
         <input
           type="text"
-          placeholder="Pesquisar clientes por nome, CPF ou telefone..."
+          placeholder="Pesquisar clientes por nome, CPF/CNPJ ou telefone..."
           className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -107,7 +195,7 @@ export default function Clientes() {
       {filteredClientes.length === 0 ? (
         <div className="bg-white p-8 rounded-xl shadow-sm text-center">
           <p className="text-gray-600 mb-4">
-            {searchTerm ? 'Nenhum cliente encontrado para a pesquisa.' : 'Nenhum cliente cadastrado ainda.'}
+            {searchTerm ? 'Nenhum cliente encontrado para a pesquisa nesta página.' : 'Nenhum cliente nesta página.'}
           </p>
           <button
             onClick={() => navigate('/clientes/novo')}
@@ -126,7 +214,7 @@ export default function Clientes() {
                     Nome
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    CPF
+                    CPF/CNPJ
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Telefone
@@ -146,7 +234,7 @@ export default function Clientes() {
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
                           <span className="text-blue-600 font-medium">
-                            {cliente.nome.charAt(0).toUpperCase()}
+                            {(cliente.nome?.charAt(0) || '?').toUpperCase()}
                           </span>
                         </div>
                         <div className="ml-4">
@@ -156,13 +244,13 @@ export default function Clientes() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {cliente.cpf || 'Não informado'}
+                      {cliente.cpf || cliente.cpf_cnpj || 'Não informado'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {cliente.telefone || 'Não informado'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(cliente.criado_em).toLocaleDateString('pt-BR')}
+                      {cliente.criado_em ? new Date(cliente.criado_em).toLocaleDateString('pt-BR') : '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
@@ -190,23 +278,42 @@ export default function Clientes() {
         </div>
       )}
 
-      {/* Paginação (opcional) */}
-      {filteredClientes.length > 0 && (
-        <div className="mt-4 flex justify-between items-center bg-white px-6 py-3 rounded-b-xl shadow-sm">
-          <div className="text-sm text-gray-500">
-            Mostrando <span className="font-medium">{filteredClientes.length}</span> de{' '}
-            <span className="font-medium">{clientes.length}</span> clientes
-          </div>
-          <div className="flex space-x-2">
-            <button className="px-3 py-1 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-              Anterior
-            </button>
-            <button className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition">
-              Próxima
-            </button>
-          </div>
+      {/* Paginação + total (Total geral SEMPRE vem do banco) */}
+      <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white px-6 py-3 rounded-b-xl shadow-sm">
+        <div className="text-sm text-gray-500">
+          Página <span className="font-medium">{page}</span> — mostrando{' '}
+          <span className="font-medium">{filteredClientes.length}</span> de{' '}
+          <span className="font-medium">{clientes.length}</span> registros carregados ({pageSize} por página)
+          {' — '}
+          <span className="font-medium">
+            Total geral: {typeof totalCount === 'number' ? totalCount : '—'}
+          </span>
         </div>
-      )}
+        <div className="flex space-x-2">
+          <button
+            onClick={handlePrev}
+            disabled={page === 1}
+            className={`px-3 py-1 rounded-md ${
+              page === 1
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'
+            }`}
+          >
+            Anterior
+          </button>
+          <button
+            onClick={handleNext}
+            disabled={!hasMore}
+            className={`px-3 py-1 rounded-md ${
+              !hasMore
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 transition'
+            }`}
+          >
+            Próxima
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

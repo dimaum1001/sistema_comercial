@@ -1,61 +1,321 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../services/api";
 import {
   FiBox,
   FiSave,
   FiList,
+  FiX,
 } from "react-icons/fi";
 
+/** ---------------- utils ---------------- */
+function useDebouncedValue(value, delay = 300) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+/** ---------------- Typeahead genérico (clientes/produtos) ---------------- */
+function AsyncSearchBox({
+  entity,                 // "produtos"
+  placeholder,
+  formatOption,
+  onSelect,
+  extraParams = {},
+  minLen = 2,
+  clearOnSelect = true,
+}) {
+  const [term, setTerm] = useState("");
+  const debounced = useDebouncedValue(term, 300);
+
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const listRef = useRef(null);
+  const blurTimer = useRef(null);
+
+  const fetchResults = useCallback(
+    async (reset = false) => {
+      const q = debounced.trim();
+      if (q.length < minLen) {
+        setResults([]);
+        setHasMore(false);
+        setOpen(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const params = {
+          q,
+          page: reset ? 1 : page,
+          per_page: 10,
+          ...extraParams,
+        };
+        const r = await api.get(`/${entity}`, { params });
+
+        const hdrTotal =
+          Number(r?.headers?.["x-total-count"]) ||
+          Number((r?.headers || {})["x-items-count"]) ||
+          null;
+
+        const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
+        setResults((prev) => (reset ? items : [...prev, ...items]));
+
+        const total = hdrTotal ?? (reset ? items.length : (results.length + items.length));
+        const fetched = reset ? items.length : (results.length + items.length);
+        setHasMore(total > fetched);
+
+        setOpen(true);
+      } catch {
+        setResults([]);
+        setHasMore(false);
+        setOpen(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [debounced, page, entity, extraParams]
+  );
+
+  useEffect(() => {
+    setPage(1);
+    setHighlight(0);
+    fetchResults(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debounced]);
+
+  useEffect(() => {
+    if (page > 1) fetchResults(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  const clearAll = () => {
+    setTerm("");
+    setResults([]);
+    setOpen(false);
+    setPage(1);
+    setHighlight(0);
+  };
+
+  const handleSelect = (item) => {
+    onSelect(item);
+    if (clearOnSelect) {
+      clearAll();
+    } else {
+      setOpen(false);
+    }
+  };
+
+  const onKeyDown = (e) => {
+    if (!open) {
+      if (e.key === "ArrowDown" && results.length > 0) setOpen(true);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((h) => Math.min(h + 1, results.length - 1));
+      scrollIntoView(highlight + 1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+      scrollIntoView(highlight - 1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const item = results[highlight];
+      if (item) handleSelect(item);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
+
+  const scrollIntoView = (idx) => {
+    const list = listRef.current;
+    if (!list) return;
+    const el = list.children[idx];
+    if (el) el.scrollIntoView({ block: "nearest" });
+  };
+
+  const onBlur = () => {
+    blurTimer.current = setTimeout(() => setOpen(false), 120);
+  };
+  const onFocus = () => {
+    if (blurTimer.current) clearTimeout(blurTimer.current);
+    if (results.length > 0) setOpen(true);
+  };
+
+  return (
+    <div className="relative w-full">
+      <div className="flex gap-2 items-center">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            className="w-full text-sm p-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder={placeholder}
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            onKeyDown={onKeyDown}
+            onBlur={onBlur}
+            onFocus={onFocus}
+          />
+          {term && (
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={clearAll}
+              title="Limpar"
+            >
+              <FiX />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {open && (
+        <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow max-h-64 overflow-auto">
+          <ul ref={listRef}>
+            {results.length === 0 && !loading && (
+              <li className="px-3 py-2 text-xs text-gray-500">Nenhum resultado</li>
+            )}
+            {results.map((it, idx) => (
+              <li
+                key={it.id}
+                onMouseDown={() => handleSelect(it)}
+                onMouseEnter={() => setHighlight(idx)}
+                className={`px-3 py-2 text-sm cursor-pointer ${idx === highlight ? "bg-blue-50" : ""}`}
+              >
+                {formatOption(it)}
+              </li>
+            ))}
+            {hasMore && (
+              <li className="px-3 py-2 text-center">
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="text-xs text-blue-600 hover:underline"
+                  disabled={loading}
+                >
+                  {loading ? "Carregando..." : "Carregar mais"}
+                </button>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** ---------------- Página: Movimentos de Estoque ---------------- */
 export default function MovimentosEstoque() {
-  const [produtos, setProdutos] = useState([]);
-  const [movimentos, setMovimentos] = useState([]);
-  const [produtoId, setProdutoId] = useState("");
+  const [produto, setProduto] = useState(null);
   const [tipo, setTipo] = useState("entrada");
   const [quantidade, setQuantidade] = useState(1);
   const [observacao, setObservacao] = useState("");
-  const [mensagem, setMensagem] = useState({ texto: "", tipo: "" });
-  const [loading, setLoading] = useState(false);
 
-  const token = localStorage.getItem("token");
+  const [estoqueAtual, setEstoqueAtual] = useState(null);
+  const [estoqueLoading, setEstoqueLoading] = useState(false);
+
+  const [movimentos, setMovimentos] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMoreMov, setHasMoreMov] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [mensagem, setMensagem] = useState({ texto: "", tipo: "" });
+
+  // --------- histórico (paginação server-side) ---------
+  const carregarMovimentos = useCallback(async (reset = true) => {
+    try {
+      const params = { page: reset ? 1 : page, per_page: 25 };
+      const r = await api.get("/estoque/movimentos", { params });
+      const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
+      const hdrTotal =
+        Number(r?.headers?.["x-total-count"]) ||
+        Number((r?.headers || {})["x-items-count"]) ||
+        null;
+
+      if (reset) {
+        setMovimentos(items);
+        setPage(1);
+      } else {
+        setMovimentos((prev) => [...prev, ...items]);
+      }
+
+      const total = hdrTotal ?? (reset ? items.length : (movimentos.length + items.length));
+      const fetched = reset ? items.length : (movimentos.length + items.length);
+      setHasMoreMov(total > fetched);
+    } catch {
+      if (reset) setMovimentos([]);
+      setHasMoreMov(false);
+      setMensagem({ texto: "Erro ao carregar histórico de estoque", tipo: "erro" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   useEffect(() => {
-    carregarProdutos();
-    carregarMovimentos();
-  }, []);
+    carregarMovimentos(true);
+  }, [carregarMovimentos]);
 
-  async function carregarProdutos() {
+  const loadMoreMov = async () => {
+    if (!hasMoreMov) return;
+    const next = page + 1;
+    setPage(next);
     try {
-      const resp = await api.get("/produtos/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setProdutos(resp.data);
-    } catch (err) {
-      console.error("Erro ao carregar produtos", err);
-      setMensagem({ texto: "Erro ao carregar produtos", tipo: "erro" });
+      const r = await api.get("/estoque/movimentos", { params: { page: next, per_page: 25 } });
+      const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
+      setMovimentos((prev) => [...prev, ...items]);
+
+      const hdrTotal =
+        Number(r?.headers?.["x-total-count"]) ||
+        Number((r?.headers || {})["x-items-count"]) ||
+        null;
+
+      const total = hdrTotal ?? (movimentos.length + items.length);
+      const fetched = movimentos.length + items.length;
+      setHasMoreMov(total > fetched);
+    } catch {
+      setHasMoreMov(false);
+    }
+  };
+
+  // --------- estoque do produto selecionado ---------
+  async function carregarEstoque(prodId) {
+    if (!prodId) {
+      setEstoqueAtual(null);
+      return;
+    }
+    setEstoqueLoading(true);
+    try {
+      const r = await api.get(`/produtos/${prodId}`);
+      const d = r?.data || {};
+      const estRaw = d.estoque ?? d.saldo ?? d.quantidade_estoque ?? d.qtd_estoque ?? null;
+      const est = Number(estRaw);
+      setEstoqueAtual(Number.isFinite(est) ? est : null);
+    } catch {
+      setEstoqueAtual(null);
+    } finally {
+      setEstoqueLoading(false);
     }
   }
 
-  async function carregarMovimentos() {
-    try {
-      const resp = await api.get("/estoque/movimentos", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMovimentos(resp.data);
-    } catch (err) {
-      console.error("Erro ao carregar movimentos", err);
-      setMensagem({
-        texto: "Erro ao carregar histórico de estoque",
-        tipo: "erro",
-      });
-    }
-  }
-
+  // --------- salvar movimento ---------
   async function salvarMovimento(e) {
     e.preventDefault();
 
-    if (!produtoId || quantidade <= 0) {
+    if (!produto || quantidade <= 0) {
+      setMensagem({ texto: "Selecione um produto e informe a quantidade", tipo: "erro" });
+      return;
+    }
+
+    // bloqueio de saída se não houver saldo
+    if (tipo === "saida" && typeof estoqueAtual === "number" && quantidade > estoqueAtual) {
       setMensagem({
-        texto: "Selecione um produto e informe a quantidade",
+        texto: `Saída maior que o saldo disponível (${estoqueAtual} un.).`,
         tipo: "erro",
       });
       return;
@@ -63,225 +323,221 @@ export default function MovimentosEstoque() {
 
     setLoading(true);
     try {
-      await api.post(
-        "/estoque/movimentar",
-        {
-          produto_id: produtoId,
-          tipo,
-          quantidade: Number(quantidade),
-          observacao,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      setMensagem({
-        texto: "Movimentação registrada com sucesso!",
-        tipo: "sucesso",
+      await api.post("/estoque/movimentar", {
+        produto_id: produto.id,
+        tipo,
+        quantidade: Number(quantidade),
+        observacao,
       });
-      setProdutoId("");
+
+      setMensagem({ texto: "Movimentação registrada com sucesso!", tipo: "sucesso" });
+      // reset parcial
       setTipo("entrada");
       setQuantidade(1);
       setObservacao("");
-      carregarMovimentos();
-      carregarProdutos();
+
+      // atualiza estoque do produto exibido e histórico
+      await carregarEstoque(produto.id);
+      await carregarMovimentos(true);
     } catch (err) {
-      console.error("Erro ao registrar movimentação", err);
-      const errorMsg =
-        err.response?.data?.detail || "Erro ao registrar movimentação";
+      const errorMsg = err?.response?.data?.detail || "Erro ao registrar movimentação";
       setMensagem({ texto: errorMsg, tipo: "erro" });
     } finally {
       setLoading(false);
     }
   }
 
+  // --------- helpers UI ---------
+  const estoqueBadgeClass = (n) => {
+    if (n <= 0) return "bg-red-100 text-red-800";
+    if (n < 10) return "bg-yellow-100 text-yellow-800";
+    return "bg-green-100 text-green-800";
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-sm p-6">
-        {/* Cabeçalho */}
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center mb-6">
-          <FiBox className="mr-2" />
-          Movimentações de Estoque
-        </h1>
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-xl shadow p-5 md:p-6">
+          {/* Cabeçalho */}
+          <h1 className="text-xl font-bold text-gray-800 flex items-center mb-4">
+            <FiBox className="mr-2" />
+            Movimentações de Estoque
+          </h1>
 
-        {/* Mensagem */}
-        {mensagem.texto && (
-          <div
-            className={`mb-4 p-3 rounded-lg ${
-              mensagem.tipo === "sucesso"
-                ? "bg-green-100 text-green-800 border border-green-200"
-                : "bg-red-100 text-red-800 border border-red-200"
-            }`}
-          >
-            {mensagem.texto}
-          </div>
-        )}
-
-        {/* Formulário de Movimentação */}
-        <form
-          onSubmit={salvarMovimento}
-          className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"
-        >
-          {/* Produto */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Produto*
-            </label>
-            <select
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={produtoId}
-              onChange={(e) => setProdutoId(e.target.value)}
-              required
+          {/* Mensagem */}
+          {mensagem.texto && (
+            <div
+              className={`mb-4 p-3 rounded-md text-sm ${
+                mensagem.tipo === "sucesso"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
+              }`}
             >
-              <option value="">Selecione um produto</option>
-              {produtos.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nome} - Estoque atual: {p.estoque}
-                </option>
-              ))}
-            </select>
-          </div>
+              {mensagem.texto}
+            </div>
+          )}
 
-          {/* Tipo */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tipo de Movimento*
-            </label>
-            <select
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-              required
-            >
-              <option value="entrada">Entrada</option>
-              <option value="saida">Saída</option>
-              <option value="ajuste">Ajuste</option>
-            </select>
-          </div>
-
-          {/* Quantidade */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Quantidade*
-            </label>
-            <input
-              type="number"
-              min="1"
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={quantidade}
-              onChange={(e) => setQuantidade(e.target.value)}
-              required
-            />
-          </div>
-
-          {/* Observação */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Observação
-            </label>
-            <input
-              type="text"
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-              placeholder="Ex: Compra fornecedor X"
-            />
-          </div>
-
-          {/* Botão */}
-          <div className="col-span-2 flex justify-end">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition disabled:opacity-60"
-            >
-              {loading ? (
-                <>
-                  <svg
-                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Salvando...
-                </>
+          {/* Formulário */}
+          <form onSubmit={salvarMovimento} className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            {/* Produto (typeahead) */}
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Produto*</label>
+              {!produto ? (
+                <AsyncSearchBox
+                  entity="produtos"
+                  placeholder="Digite 2+ letras, código ou escaneie o código de barras…"
+                  minLen={2}
+                  formatOption={(p) =>
+                    `${p.codigo_produto ? p.codigo_produto + " - " : ""}${p.nome}`
+                  }
+                  onSelect={async (p) => {
+                    setProduto(p);
+                    await carregarEstoque(p.id);
+                  }}
+                  clearOnSelect={true}
+                />
               ) : (
-                <>
-                  <FiSave className="mr-2" />
-                  Registrar
-                </>
+                <div className="flex flex-col gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-700">
+                      <span className="font-medium">
+                        {produto.codigo_produto ? `${produto.codigo_produto} - ` : ""}
+                        {produto.nome}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-blue-600 hover:underline"
+                      onClick={() => { setProduto(null); setEstoqueAtual(null); }}
+                    >
+                      Trocar
+                    </button>
+                  </div>
+                  <div className="text-xs text-gray-700">
+                    {estoqueLoading ? (
+                      <span className="text-gray-500">Carregando estoque…</span>
+                    ) : typeof estoqueAtual === "number" ? (
+                      <span className={`px-2 py-0.5 rounded-full ${estoqueBadgeClass(estoqueAtual)}`}>
+                        Saldo atual: {estoqueAtual} un.
+                      </span>
+                    ) : (
+                      <span className="text-gray-500">Saldo não disponível</span>
+                    )}
+                  </div>
+                </div>
               )}
-            </button>
-          </div>
-        </form>
+            </div>
 
-        {/* Histórico de Movimentos */}
-        <h2 className="text-lg font-semibold mb-4 flex items-center">
-          <FiList className="mr-2" />
-          Histórico de Movimentações
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Data
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Produto
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Fornecedor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Tipo
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Quantidade
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Observação
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {movimentos.map((m) => (
-                <tr key={m.id}>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(m.data_movimento).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {m.produto?.nome || "Produto removido"}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {m.produto?.fornecedor?.nome || "-"}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 capitalize">
-                    {m.tipo}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {m.quantidade}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {m.observacao || "-"}
-                  </td>
+            {/* Tipo */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Movimento*</label>
+              <select
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value)}
+                required
+              >
+                <option value="entrada">Entrada</option>
+                <option value="saida">Saída</option>
+                <option value="ajuste">Ajuste</option>
+              </select>
+            </div>
+
+            {/* Quantidade */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade*</label>
+              <input
+                type="number"
+                min="1"
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                value={quantidade}
+                onChange={(e) => setQuantidade(Math.max(1, Number(e.target.value) || 1))}
+                required
+              />
+              {tipo === "saida" && typeof estoqueAtual === "number" && (
+                <p className="text-[11px] mt-1">
+                  Disponível para saída:{" "}
+                  <span className={`px-1 rounded ${estoqueBadgeClass(estoqueAtual)}`}>
+                    {estoqueAtual} un.
+                  </span>
+                </p>
+              )}
+            </div>
+
+            {/* Observação */}
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Observação</label>
+              <input
+                type="text"
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="Ex: Compra fornecedor X / Perda / Ajuste inventário…"
+              />
+            </div>
+
+            {/* Botão */}
+            <div className="flex items-end justify-end">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex items-center bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition disabled:opacity-60"
+              >
+                {loading ? "Salvando..." : (<><FiSave className="mr-2" /> Registrar</>)}
+              </button>
+            </div>
+          </form>
+
+          {/* Histórico */}
+          <h2 className="text-md font-semibold mb-3 flex items-center">
+            <FiList className="mr-2" />
+            Histórico de Movimentações
+          </h2>
+
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left">Data</th>
+                  <th className="px-4 py-2 text-left">Produto</th>
+                  <th className="px-4 py-2 text-left">Tipo</th>
+                  <th className="px-4 py-2 text-right">Quantidade</th>
+                  <th className="px-4 py-2 text-left">Observação</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {movimentos.map((m) => (
+                  <tr key={m.id} className="border-t">
+                    <td className="px-4 py-2 text-gray-600">
+                      {new Date(m.data_movimento).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                    </td>
+                    <td className="px-4 py-2">{m.produto?.nome || "Produto removido"}</td>
+                    <td className="px-4 py-2 capitalize">{m.tipo}</td>
+                    <td className="px-4 py-2 text-right">{m.quantidade}</td>
+                    <td className="px-4 py-2 text-gray-600">{m.observacao || "-"}</td>
+                  </tr>
+                ))}
+                {movimentos.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                      Nenhuma movimentação registrada.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {hasMoreMov && (
+            <div className="flex justify-center mt-3">
+              <button
+                className="text-blue-600 text-sm hover:underline"
+                onClick={loadMoreMov}
+              >
+                Carregar mais
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

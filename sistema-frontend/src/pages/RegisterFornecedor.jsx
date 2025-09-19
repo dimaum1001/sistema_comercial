@@ -13,6 +13,7 @@ export default function RegisterFornecedor() {
   const navigate = useNavigate()
 
   const [formData, setFormData] = useState({
+    tipo_pessoa: 'J', // <- novo (F ou J)
     razao_social: '',
     nome_fantasia: '',
     cnpj: '',
@@ -46,12 +47,24 @@ export default function RegisterFornecedor() {
           const fornecedor = response.data
 
           setFormData({
+            tipo_pessoa: fornecedor.tipo_pessoa || 'J',
             razao_social: fornecedor.razao_social || '',
-            nome_fantasia: fornecedor.nome_fantasia || '',
-            cnpj: fornecedor.cnpj || '',
+            // backend usa "nome" (nome fantasia). Mantemos seu campo nome_fantasia aqui
+            nome_fantasia: fornecedor.nome || '',
+            cnpj: fornecedor.cnpj_cpf || '',
             telefone: fornecedor.telefone || '',
             email: fornecedor.email || '',
-            endereco: fornecedor.enderecos && fornecedor.enderecos.length > 0 ? fornecedor.enderecos[0] : {
+            endereco: fornecedor.enderecos && fornecedor.enderecos.length > 0 ? {
+              tipo_endereco: fornecedor.enderecos[0].tipo_endereco || 'comercial',
+              cep: fornecedor.enderecos[0].cep || '',
+              logradouro: fornecedor.enderecos[0].logradouro || '',
+              numero: fornecedor.enderecos[0].numero || '',
+              complemento: fornecedor.enderecos[0].complemento || '',
+              bairro: fornecedor.enderecos[0].bairro || '',
+              cidade: fornecedor.enderecos[0].cidade || '',
+              estado: fornecedor.enderecos[0].estado || '',
+              pais: fornecedor.enderecos[0].pais || 'Brasil'
+            } : {
               tipo_endereco: 'comercial',
               cep: '',
               logradouro: '',
@@ -81,9 +94,12 @@ export default function RegisterFornecedor() {
 
   const handleEnderecoChange = (e) => {
     const { name, value } = e.target
+    // força UF maiúsculo
+    const val = name === 'estado' ? String(value).toUpperCase() : value
+
     setFormData(prev => ({
       ...prev,
-      endereco: { ...prev.endereco, [name]: value }
+      endereco: { ...prev.endereco, [name]: val }
     }))
 
     // 🔹 Consulta automática no ViaCEP
@@ -98,7 +114,7 @@ export default function RegisterFornecedor() {
                 logradouro: resp.data.logradouro || "",
                 bairro: resp.data.bairro || "",
                 cidade: resp.data.localidade || "",
-                estado: resp.data.uf || "",
+                estado: (resp.data.uf || "").toUpperCase(),
                 cep: value
               }
             }))
@@ -113,11 +129,24 @@ export default function RegisterFornecedor() {
     setLoading(true)
     setMensagem({ texto: '', tipo: '' })
 
-    if (!formData.razao_social || !formData.cnpj) {
+    const doc = (formData.cnpj || '').replace(/\D/g, '')
+    if (!formData.razao_social || !doc) {
       setMensagem({ 
-        texto: 'Razão Social e CNPJ são obrigatórios', 
+        texto: 'Razão Social e documento (CNPJ/CPF) são obrigatórios', 
         tipo: 'erro' 
       })
+      setLoading(false)
+      return
+    }
+
+    // valida tamanho básico
+    if (formData.tipo_pessoa === 'J' && doc.length !== 14) {
+      setMensagem({ texto: 'CNPJ inválido', tipo: 'erro' })
+      setLoading(false)
+      return
+    }
+    if (formData.tipo_pessoa === 'F' && doc.length !== 11) {
+      setMensagem({ texto: 'CPF inválido', tipo: 'erro' })
       setLoading(false)
       return
     }
@@ -125,9 +154,12 @@ export default function RegisterFornecedor() {
     try {
       const token = localStorage.getItem('token')
       const payload = {
+        // mapeamento para o backend
+        tipo_pessoa: formData.tipo_pessoa,
         razao_social: (formData.razao_social || "").trim(),
-        nome_fantasia: (formData.nome_fantasia || "").trim(),
-        cnpj: (formData.cnpj || "").replace(/\D/g, ""),
+        // backend aceita "nome" (alias para seu nome_fantasia no schema)
+        nome: (formData.nome_fantasia || "").trim() || (formData.razao_social || "").trim(),
+        cnpj_cpf: doc,
         telefone: formData.telefone?.replace(/\D/g, "") || null,
         email: formData.email?.trim() || null,
         enderecos: [formData.endereco]
@@ -145,7 +177,7 @@ export default function RegisterFornecedor() {
         setMensagem({ texto: 'Fornecedor cadastrado com sucesso!', tipo: 'sucesso' })
       }
 
-      setTimeout(() => navigate('/fornecedores'), 2000)
+      setTimeout(() => navigate('/fornecedores'), 1200)
 
     } catch (err) {
       console.error('Erro ao salvar fornecedor:', err)
@@ -157,6 +189,10 @@ export default function RegisterFornecedor() {
       setLoading(false)
     }
   }
+
+  // máscara dinâmica conforme tipo de pessoa
+  const maskDocumento = formData.tipo_pessoa === 'F' ? '999.999.999-99' : '99.999.999/9999-99'
+  const labelDocumento = formData.tipo_pessoa === 'F' ? 'CPF *' : 'CNPJ *'
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -191,6 +227,21 @@ export default function RegisterFornecedor() {
             </div>
           )}
 
+          {/* Tipo de Pessoa */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Pessoa *</label>
+            <select
+              name="tipo_pessoa"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={formData.tipo_pessoa}
+              onChange={handleChange}
+              required
+            >
+              <option value="J">Jurídica</option>
+              <option value="F">Física</option>
+            </select>
+          </div>
+
           {/* Razão Social */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Razão Social *</label>
@@ -221,15 +272,15 @@ export default function RegisterFornecedor() {
             />
           </div>
 
-          {/* CNPJ */}
+          {/* Documento (CNPJ/CPF) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{labelDocumento}</label>
             <div className="relative">
               <FiCreditCard className="absolute left-3 top-3 text-gray-400" />
               <InputMask
-                mask="99.999.999/9999-99"
+                mask={maskDocumento}
                 name="cnpj"
-                placeholder="00.000.000/0000-00"
+                placeholder={formData.tipo_pessoa === 'F' ? '000.000.000-00' : '00.000.000/0000-00'}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={formData.cnpj}
                 onChange={handleChange}
