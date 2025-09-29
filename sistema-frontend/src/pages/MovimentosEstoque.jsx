@@ -1,13 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../services/api";
-import {
-  FiBox,
-  FiSave,
-  FiList,
-  FiX,
-} from "react-icons/fi";
+import { FiBox, FiSave, FiList, FiX } from "react-icons/fi";
 
-/** ---------------- utils ---------------- */
+/* ---------------- utils ---------------- */
 function useDebouncedValue(value, delay = 300) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -17,17 +12,19 @@ function useDebouncedValue(value, delay = 300) {
   return debounced;
 }
 
-/** ---------------- Typeahead genérico (clientes/produtos) ---------------- */
+/* ---------------- Typeahead genérico (clientes/produtos) ---------------- */
 function AsyncSearchBox({
-  entity,                 // "produtos"
+  entity,
   placeholder,
   formatOption,
   onSelect,
   extraParams = {},
   minLen = 2,
   clearOnSelect = true,
+  rightSlot = null,
+  initialValue = "",
 }) {
-  const [term, setTerm] = useState("");
+  const [term, setTerm] = useState(initialValue);
   const debounced = useDebouncedValue(term, 300);
 
   const [results, setResults] = useState([]);
@@ -41,7 +38,7 @@ function AsyncSearchBox({
 
   const fetchResults = useCallback(
     async (reset = false) => {
-      const q = debounced.trim();
+      const q = (debounced || "").trim();
       if (q.length < minLen) {
         setResults([]);
         setHasMore(false);
@@ -58,16 +55,16 @@ function AsyncSearchBox({
         };
         const r = await api.get(`/${entity}`, { params });
 
+        const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
         const hdrTotal =
           Number(r?.headers?.["x-total-count"]) ||
           Number((r?.headers || {})["x-items-count"]) ||
           null;
 
-        const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
         setResults((prev) => (reset ? items : [...prev, ...items]));
 
-        const total = hdrTotal ?? (reset ? items.length : (results.length + items.length));
-        const fetched = reset ? items.length : (results.length + items.length);
+        const total = hdrTotal ?? (reset ? items.length : results.length + items.length);
+        const fetched = reset ? items.length : results.length + items.length;
         setHasMore(total > fetched);
 
         setOpen(true);
@@ -105,11 +102,8 @@ function AsyncSearchBox({
 
   const handleSelect = (item) => {
     onSelect(item);
-    if (clearOnSelect) {
-      clearAll();
-    } else {
-      setOpen(false);
-    }
+    if (clearOnSelect) clearAll();
+    else setOpen(false);
   };
 
   const onKeyDown = (e) => {
@@ -175,6 +169,7 @@ function AsyncSearchBox({
             </button>
           )}
         </div>
+        {rightSlot}
       </div>
 
       {open && (
@@ -188,7 +183,9 @@ function AsyncSearchBox({
                 key={it.id}
                 onMouseDown={() => handleSelect(it)}
                 onMouseEnter={() => setHighlight(idx)}
-                className={`px-3 py-2 text-sm cursor-pointer ${idx === highlight ? "bg-blue-50" : ""}`}
+                className={`px-3 py-2 text-sm cursor-pointer ${
+                  idx === highlight ? "bg-blue-50" : ""
+                }`}
               >
                 {formatOption(it)}
               </li>
@@ -213,7 +210,7 @@ function AsyncSearchBox({
   );
 }
 
-/** ---------------- Página: Movimentos de Estoque ---------------- */
+/* ---------------- Página: Movimentos de Estoque ---------------- */
 export default function MovimentosEstoque() {
   const [produto, setProduto] = useState(null);
   const [tipo, setTipo] = useState("entrada");
@@ -223,68 +220,67 @@ export default function MovimentosEstoque() {
   const [estoqueAtual, setEstoqueAtual] = useState(null);
   const [estoqueLoading, setEstoqueLoading] = useState(false);
 
+  // histórico (lista)
   const [movimentos, setMovimentos] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMoreMov, setHasMoreMov] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // busca e paginação — mesmo esquema da tela de preços
+  const [q, setQ] = useState("");
+  const debouncedQ = useDebouncedValue(q, 300);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+
   const [mensagem, setMensagem] = useState({ texto: "", tipo: "" });
 
-  // --------- histórico (paginação server-side) ---------
-  const carregarMovimentos = useCallback(async (reset = true) => {
+  /* --------- carregar histórico com paginação --------- */
+  const carregarMovimentos = useCallback(async () => {
+    setLoading(true);
     try {
-      const params = { page: reset ? 1 : page, per_page: 25 };
+      // use skip/limit (ou page/per_page — ajuste se seu backend pedir)
+      const skip = Math.max(0, (page - 1) * perPage);
+      const params = { skip, limit: perPage };
+      if (debouncedQ && debouncedQ.trim()) params.q = debouncedQ.trim();
+
       const r = await api.get("/estoque/movimentos", { params });
       const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
+
+      setMovimentos(items);
+
       const hdrTotal =
         Number(r?.headers?.["x-total-count"]) ||
-        Number((r?.headers || {})["x-items-count"]) ||
-        null;
+        (() => {
+          const cr = r?.headers?.["content-range"];
+          if (cr && typeof cr === "string" && cr.includes("/")) {
+            const n = Number(cr.split("/").pop());
+            return Number.isNaN(n) ? null : n;
+          }
+          return null;
+        })();
 
-      if (reset) {
-        setMovimentos(items);
-        setPage(1);
+      // inferir próxima página quando não houver cabeçalho
+      const next = items.length === perPage;
+      setHasNext(next);
+
+      if (typeof hdrTotal === "number") {
+        setTotal(hdrTotal);
       } else {
-        setMovimentos((prev) => [...prev, ...items]);
+        setTotal(skip + items.length + (next ? 1 : 0));
       }
-
-      const total = hdrTotal ?? (reset ? items.length : (movimentos.length + items.length));
-      const fetched = reset ? items.length : (movimentos.length + items.length);
-      setHasMoreMov(total > fetched);
     } catch {
-      if (reset) setMovimentos([]);
-      setHasMoreMov(false);
-      setMensagem({ texto: "Erro ao carregar histórico de estoque", tipo: "erro" });
+      setMovimentos([]);
+      setHasNext(false);
+    } finally {
+      setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, perPage, debouncedQ]);
 
   useEffect(() => {
-    carregarMovimentos(true);
+    carregarMovimentos();
   }, [carregarMovimentos]);
 
-  const loadMoreMov = async () => {
-    if (!hasMoreMov) return;
-    const next = page + 1;
-    setPage(next);
-    try {
-      const r = await api.get("/estoque/movimentos", { params: { page: next, per_page: 25 } });
-      const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
-      setMovimentos((prev) => [...prev, ...items]);
-
-      const hdrTotal =
-        Number(r?.headers?.["x-total-count"]) ||
-        Number((r?.headers || {})["x-items-count"]) ||
-        null;
-
-      const total = hdrTotal ?? (movimentos.length + items.length);
-      const fetched = movimentos.length + items.length;
-      setHasMoreMov(total > fetched);
-    } catch {
-      setHasMoreMov(false);
-    }
-  };
-
-  // --------- estoque do produto selecionado ---------
+  /* --------- estoque do produto selecionado --------- */
   async function carregarEstoque(prodId) {
     if (!prodId) {
       setEstoqueAtual(null);
@@ -304,7 +300,7 @@ export default function MovimentosEstoque() {
     }
   }
 
-  // --------- salvar movimento ---------
+  /* --------- salvar movimento --------- */
   async function salvarMovimento(e) {
     e.preventDefault();
 
@@ -313,7 +309,6 @@ export default function MovimentosEstoque() {
       return;
     }
 
-    // bloqueio de saída se não houver saldo
     if (tipo === "saida" && typeof estoqueAtual === "number" && quantidade > estoqueAtual) {
       setMensagem({
         texto: `Saída maior que o saldo disponível (${estoqueAtual} un.).`,
@@ -322,6 +317,7 @@ export default function MovimentosEstoque() {
       return;
     }
 
+    setMensagem({ texto: "", tipo: "" });
     setLoading(true);
     try {
       await api.post("/estoque/movimentar", {
@@ -332,14 +328,14 @@ export default function MovimentosEstoque() {
       });
 
       setMensagem({ texto: "Movimentação registrada com sucesso!", tipo: "sucesso" });
-      // reset parcial
       setTipo("entrada");
       setQuantidade(1);
       setObservacao("");
 
-      // atualiza estoque do produto exibido e histórico
       await carregarEstoque(produto.id);
-      await carregarMovimentos(true);
+      // volta para a página 1 para o usuário já ver a movimentação recente
+      setPage(1);
+      await carregarMovimentos();
     } catch (err) {
       const errorMsg = err?.response?.data?.detail || "Erro ao registrar movimentação";
       setMensagem({ texto: errorMsg, tipo: "erro" });
@@ -348,12 +344,18 @@ export default function MovimentosEstoque() {
     }
   }
 
-  // --------- helpers UI ---------
+  /* --------- helpers UI --------- */
   const estoqueBadgeClass = (n) => {
     if (n <= 0) return "bg-red-100 text-red-800";
     if (n < 10) return "bg-yellow-100 text-yellow-800";
     return "bg-green-100 text-green-800";
   };
+
+  const renderSkip = Math.max(0, (page - 1) * perPage);
+  const showingStart = movimentos.length === 0 ? 0 : renderSkip + 1;
+  const showingEnd = renderSkip + movimentos.length;
+  const displayTotal = total || (movimentos.length === 0 ? 0 : showingEnd);
+  const canGoNext = hasNext || showingEnd < total;
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -409,7 +411,10 @@ export default function MovimentosEstoque() {
                     <button
                       type="button"
                       className="text-xs text-blue-600 hover:underline"
-                      onClick={() => { setProduto(null); setEstoqueAtual(null); }}
+                      onClick={() => {
+                        setProduto(null);
+                        setEstoqueAtual(null);
+                      }}
                     >
                       Trocar
                     </button>
@@ -484,10 +489,45 @@ export default function MovimentosEstoque() {
                 disabled={loading}
                 className="flex items-center bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition disabled:opacity-60"
               >
-                {loading ? "Salvando..." : (<><FiSave className="mr-2" /> Registrar</>)}
+                {loading ? "Salvando..." : <> <FiSave className="mr-2" /> Registrar </>}
               </button>
             </div>
           </form>
+
+          {/* Filtros e paginação da LISTA (igual à tela de preços) */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+            <div className="relative w-full md:w-80">
+              <input
+                type="text"
+                className="w-full pl-3 pr-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="Buscar por produto, tipo, observação…"
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Por página:</span>
+              <select
+                className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(1);
+                  setHasNext(false);
+                }}
+              >
+                {[10, 25, 50, 100, 200].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           {/* Histórico */}
           <h2 className="text-md font-semibold mb-3 flex items-center">
@@ -507,41 +547,67 @@ export default function MovimentosEstoque() {
                 </tr>
               </thead>
               <tbody>
-                {movimentos.map((m) => (
-                  <tr key={m.id} className="border-t">
-                    <td className="px-4 py-2 text-gray-600">
-                      {new Date(m.data_movimento).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
-                    </td>
-                    <td className="px-4 py-2">{m.produto?.nome || "Produto removido"}</td>
-                    <td className="px-4 py-2 capitalize">{m.tipo}</td>
-                    <td className="px-4 py-2 text-right">{m.quantidade}</td>
-                    <td className="px-4 py-2 text-gray-600">{m.observacao || "-"}</td>
-                  </tr>
-                ))}
-                {movimentos.length === 0 && (
+                {loading ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
-                      Nenhuma movimentação registrada.
+                      Carregando...
                     </td>
                   </tr>
+                ) : movimentos.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                      Nenhuma movimentação encontrada.
+                    </td>
+                  </tr>
+                ) : (
+                  movimentos.map((m) => (
+                    <tr key={m.id} className="border-t">
+                      <td className="px-4 py-2 text-gray-600">
+                        {m.data_movimento
+                          ? new Date(m.data_movimento).toLocaleString("pt-BR", {
+                              timeZone: "America/Sao_Paulo",
+                            })
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-2">{m.produto?.nome || "Produto removido"}</td>
+                      <td className="px-4 py-2 capitalize">{m.tipo}</td>
+                      <td className="px-4 py-2 text-right">{m.quantidade}</td>
+                      <td className="px-4 py-2 text-gray-600">{m.observacao || "-"}</td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
 
-          {hasMoreMov && (
-            <div className="flex justify-center mt-3">
+          {/* Paginação (igual à tela de preços) */}
+          <div className="mt-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div className="text-sm text-gray-600">
+              Página <span className="font-medium">{page}</span> — mostrando{" "}
+              <span className="font-medium">
+                {movimentos.length === 0 ? 0 : `${showingStart}-${showingEnd}`}
+              </span>{" "}
+              de <span className="font-medium">{displayTotal}</span> registros
+            </div>
+            <div className="flex gap-2">
               <button
-                className="text-blue-600 text-sm hover:underline"
-                onClick={loadMoreMov}
+                className="px-3 py-1 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition disabled:opacity-50"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                Carregar mais
+                Anterior
+              </button>
+              <button
+                className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+                disabled={!canGoNext || loading}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Próxima
               </button>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

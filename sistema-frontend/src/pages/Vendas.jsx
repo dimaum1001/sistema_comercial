@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../services/api";
 import {
   FiShoppingCart,
@@ -330,8 +330,35 @@ export default function Vendas() {
     }
   }
 
+  function extrairPrecoAtivoLocal(prod) {
+    if (!prod) return null;
+    const lista = Array.isArray(prod.precos) ? prod.precos : [];
+    const ativo = lista.find((registro) => registro && registro.ativo);
+    if (ativo) {
+      const valor = Number(ativo.preco ?? ativo.valor ?? 0);
+      if (Number.isFinite(valor) && valor > 0) {
+        return valor;
+      }
+    }
+    return null;
+  }
+
+  async function buscarPrecoAtivoRemoto(prodId) {
+    if (!prodId) return null;
+    try {
+      const r = await api.get("/precos", { params: { produto_id: prodId, limit: 5 } });
+      const lista = Array.isArray(r.data) ? r.data : r.data?.items || [];
+      const ativo = lista.find((registro) => registro && registro.ativo);
+      if (!ativo) return null;
+      const valor = Number(ativo.preco ?? ativo.valor ?? 0);
+      return Number.isFinite(valor) && valor > 0 ? valor : null;
+    } catch {
+      return null;
+    }
+  }
+
   // ---------- adicionar item ----------
-  function adicionarItemComProduto(p) {
+  async function adicionarItemComProduto(p) {
     if (!p) {
       setMensagem({ texto: "Selecione um produto", tipo: "erro" });
       return;
@@ -341,7 +368,23 @@ export default function Vendas() {
       return;
     }
 
-    // calcula reservado no carrinho para este produto
+    let precoAtivo = extrairPrecoAtivoLocal(p);
+
+    if (!Number.isFinite(precoAtivo) || precoAtivo <= 0) {
+      const precoRemoto = await buscarPrecoAtivoRemoto(p.id);
+      if (Number.isFinite(precoRemoto) && precoRemoto > 0) {
+        precoAtivo = precoRemoto;
+      }
+    }
+
+    if (!Number.isFinite(precoAtivo) || precoAtivo <= 0) {
+      setMensagem({
+        texto: "Produto sem preco ativo. Cadastre ou ative um preco antes de prosseguir.",
+        tipo: "erro",
+      });
+      return;
+    }
+
     const reservado = itens
       .filter((i) => i.produto_id === p.id)
       .reduce((s, i) => s + i.quantidade, 0);
@@ -365,12 +408,11 @@ export default function Vendas() {
       {
         produto_id: p.id,
         quantidade: Number(quantidade),
-        preco_unit: Number(p.preco_venda ?? 0),
+        preco_unit: Number(precoAtivo),
         nome: p.nome,
       },
     ]);
 
-    // limpa selecao de produto e quantidade
     setProduto(null);
     setEstoqueAtual(null);
     setQuantidade(1);
@@ -388,7 +430,7 @@ export default function Vendas() {
       if (list.length > 0) {
         // carrega estoque do produto e adiciona
         await carregarEstoque(list[0].id);
-        adicionarItemComProduto(list[0]);
+        await adicionarItemComProduto(list[0]);
       } else {
         setMensagem({ texto: "Produto nao encontrado", tipo: "erro" });
       }
@@ -589,7 +631,7 @@ export default function Vendas() {
                       />
                       <button
                         className="bg-blue-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-blue-700"
-                        onClick={() => adicionarItemComProduto(produto)}
+                        onClick={async () => { await adicionarItemComProduto(produto); }}
                       >
                         Adicionar
                       </button>
@@ -1085,5 +1127,9 @@ function PagamentosEditor({
     </div>
   );
 }
+
+
+
+
 
 

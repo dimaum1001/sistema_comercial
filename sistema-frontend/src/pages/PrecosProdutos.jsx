@@ -222,23 +222,24 @@ export default function PrecosProdutos() {
   const debouncedQ = useDebouncedValue(q, 300);
 
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25); // 10,25,50,100,200 (se quiser)
+  const [perPage, setPerPage] = useState(25);
   const [total, setTotal] = useState(0);
+  const [hasNext, setHasNext] = useState(false); // <-- chave para habilitar "Próxima"
 
   // carregar lista com paginação e filtro
   const fetchPrecos = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, per_page: perPage };
+      const skip = Math.max(0, (page - 1) * perPage);
+      const params = { skip, limit: perPage }; // rota /precos usa skip/limit
       if (debouncedQ && debouncedQ.trim()) params.q = debouncedQ.trim();
 
-      // Ideal: back expõe /precos com join de produto e cabeçalhos de total.
       const resp = await api.get("/precos", { params });
 
       const items = Array.isArray(resp.data) ? resp.data : resp.data?.items || [];
       setLista(items);
 
-      // headers padrão
+      // headers padrão (se existirem)
       const hdrTotal =
         Number(resp?.headers?.["x-total-count"]) ||
         (() => {
@@ -250,13 +251,19 @@ export default function PrecosProdutos() {
           return null;
         })();
 
-      // fallback: se não vier total, tenta deduzir do payload
-      if (typeof hdrTotal === "number") setTotal(hdrTotal);
-      else if (Array.isArray(resp.data) && resp.data.length < perPage && page === 1)
-        setTotal(resp.data.length);
-      else setTotal((prev) => (prev < items.length ? items.length : prev));
+      // se não houver cabeçalho, inferimos se há próxima página pelo tamanho do lote
+      const next = items.length === perPage;
+      setHasNext(next);
+
+      if (typeof hdrTotal === "number") {
+        setTotal(hdrTotal);
+      } else {
+        // estimativa: se tem próxima, adiciona +1 para não travar "Próxima"
+        setTotal(skip + items.length + (next ? 1 : 0));
+      }
     } catch (e) {
       setLista([]);
+      setHasNext(false);
     } finally {
       setLoading(false);
     }
@@ -298,6 +305,14 @@ export default function PrecosProdutos() {
     typeof v === "number" && !Number.isNaN(v)
       ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
       : "-";
+
+  const renderSkip = Math.max(0, (page - 1) * perPage);
+  const showingStart = lista.length === 0 ? 0 : renderSkip + 1;
+  const showingEnd = renderSkip + lista.length;
+  const displayTotal = total || (lista.length === 0 ? 0 : showingEnd);
+
+  // habilita “Próxima” quando o lote veio cheio (ou quando headers trouxerem total maior)
+  const canGoNext = hasNext || showingEnd < total;
 
   // UI
   return (
@@ -391,6 +406,7 @@ export default function PrecosProdutos() {
             onChange={(e) => {
               setPerPage(Number(e.target.value));
               setPage(1);
+              setHasNext(false);
             }}
           >
             {[10, 25, 50, 100, 200].map((n) => (
@@ -420,7 +436,7 @@ export default function PrecosProdutos() {
             {loading ? (
               <tr>
                 <td className="px-4 py-6 text-center text-sm text-gray-500" colSpan={7}>
-                  Carregando…
+                  Carregando...
                 </td>
               </tr>
             ) : lista.length === 0 ? (
@@ -435,14 +451,16 @@ export default function PrecosProdutos() {
                   p.produto ||
                   p.product ||
                   p.produto_obj ||
-                  {}; // compatível com diferentes backends
+                  {};
                 const nome = prod?.nome || p.produto_nome || "-";
                 const cod = prod?.codigo_produto || p.codigo_produto || "-";
                 return (
                   <tr key={p.id} className="border-t">
                     <td className="px-4 py-2">{nome}</td>
                     <td className="px-4 py-2">{cod}</td>
-                    <td className="px-4 py-2">{fmtBRL(Number(p.preco))}</td>
+                    <td className="px-4 py-2">
+                      {fmtBRL(Number(p.preco))}
+                    </td>
                     <td className="px-4 py-2">{p.ativo ? "Sim" : "Não"}</td>
                     <td className="px-4 py-2">
                       {p.data_inicio ? new Date(p.data_inicio).toLocaleString("pt-BR") : "—"}
@@ -471,8 +489,10 @@ export default function PrecosProdutos() {
       <div className="mt-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div className="text-sm text-gray-600">
           Página <span className="font-medium">{page}</span> — mostrando{" "}
-          <span className="font-medium">{lista.length}</span> de{" "}
-          <span className="font-medium">{total || "?"}</span> registros
+          <span className="font-medium">
+            {lista.length === 0 ? 0 : `${showingStart}-${showingEnd}`}
+          </span>{" "}
+          de <span className="font-medium">{displayTotal}</span> registros
         </div>
         <div className="flex gap-2">
           <button
@@ -484,7 +504,7 @@ export default function PrecosProdutos() {
           </button>
           <button
             className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
-            disabled={lista.length < perPage || (total && page * perPage >= total)}
+            disabled={!canGoNext}
             onClick={() => setPage((p) => p + 1)}
           >
             Próxima
