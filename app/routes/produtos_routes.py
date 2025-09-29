@@ -1,12 +1,3 @@
-"""
-Rotas para gerenciamento de produtos e seus preços.
-
-- Paginação server-side (aceita page/per_page OU limit/offset; teto=200)
-- Busca server-side (q | search | term | nome) em campos do Produto
-- Retorna total do banco via cabeçalhos: X-Total-Count e Content-Range
-- Endpoints /produtos/count e /produtos/total para fallback do front
-"""
-
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
@@ -71,7 +62,7 @@ def _termo_busca(q: Optional[str], search: Optional[str], term: Optional[str], n
 @router.post("/produtos", response_model=ProdutoOut)
 def criar_produto(produto: ProdutoCreate, db: Session = Depends(get_db)) -> Produto:
     """Cria um novo produto e, opcionalmente, seu preço inicial."""
-    dados = produto.dict(exclude_unset=True)
+    dados = produto.model_dump(exclude_unset=True)
 
     # Garante codigo_produto (NOT NULL e UNIQUE)
     codigo = dados.get("codigo_produto")
@@ -141,15 +132,12 @@ def listar_produtos(
                 Produto.marca.ilike(like),
                 Produto.codigo_barras.ilike(like),
                 Produto.codigo_produto.ilike(like),
-                # Caso sua model tenha estes campos, eles já funcionam:
-                # Produto.localizacao.ilike(like),
-                # Produto.unidade.ilike(like),
             )
         )
 
     total = base_query.with_entities(func.count(Produto.id)).scalar() or 0
 
-    # ordenação padrão para estabilidade (ajuste se quiser)
+    # ordenação padrão (ajuste se quiser)
     query = (
         base_query.options(joinedload(Produto.precos))
         .order_by(Produto.nome.asc(), Produto.id.asc())
@@ -159,7 +147,7 @@ def listar_produtos(
 
     produtos = query.all()
 
-    # Cabeçalhos de total & range (para o front mostrar 1–200, 201–400, ...)
+    # Cabeçalhos de total & range
     start = 0 if total == 0 else skip + 1
     end = min(skip + lim, total)
     response.headers["X-Total-Count"] = str(total)
@@ -189,7 +177,7 @@ def atualizar_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Sessi
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
 
-    dados_update = produto_update.dict(exclude_unset=True)
+    dados_update = produto_update.model_dump(exclude_unset=True)
 
     # Alteração de preço => fecha preço ativo e cria novo
     if "preco_venda" in dados_update and dados_update["preco_venda"] is not None:
@@ -235,6 +223,25 @@ def atualizar_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Sessi
     return produto
 
 
+# ------- PATCH parcial (opcional) -------
+@router.patch("/produtos/{produto_id}", response_model=ProdutoOut)
+def patch_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Session = Depends(get_db)) -> Produto:
+    return atualizar_produto(produto_id, produto_update, db)
+
+
+# ------- Aliases para compatibilidade com o front -------
+@router.get("/produtos/editar/{produto_id}", response_model=ProdutoOut)
+def buscar_produto_alias_editar(produto_id: UUID, db: Session = Depends(get_db)) -> Produto:
+    """Alias para GET /produtos/{id} (útil se o front chama /produtos/editar/:id)."""
+    return buscar_produto(produto_id, db)
+
+
+@router.put("/produtos/editar/{produto_id}", response_model=ProdutoOut)
+def atualizar_produto_alias_editar(produto_id: UUID, produto_update: ProdutoUpdate, db: Session = Depends(get_db)) -> Produto:
+    """Alias para PUT /produtos/{id} (útil se o front chama /produtos/editar/:id)."""
+    return atualizar_produto(produto_id, produto_update, db)
+
+
 @router.delete("/produtos/{produto_id}", status_code=204)
 def deletar_produto(produto_id: UUID, db: Session = Depends(get_db)):
     """Deleta um produto do banco de dados."""
@@ -249,7 +256,6 @@ def deletar_produto(produto_id: UUID, db: Session = Depends(get_db)):
 # -------------------- endpoints auxiliares de total -------------------- #
 @router.get("/produtos/count")
 def total_produtos_count(
-    # mantemos os mesmos filtros da listagem para o total bater com a busca
     q: Optional[str] = None,
     search: Optional[str] = None,
     term: Optional[str] = None,
@@ -280,5 +286,4 @@ def total_produtos_total(
     nome: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    # mesmo comportamento do /produtos/count
     return total_produtos_count(q=q, search=search, term=term, nome=nome, db=db)

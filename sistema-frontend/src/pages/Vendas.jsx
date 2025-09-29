@@ -12,7 +12,7 @@ import {
 } from "react-icons/fi";
 
 /**
- * Hooks utilitários
+ * Hooks utilitarios
  */
 function useDebouncedValue(value, delay = 300) {
   const [debounced, setDebounced] = useState(value);
@@ -27,8 +27,10 @@ function onlyDigits(s) {
   return (s || "").toString().replace(/\D/g, "");
 }
 
+const HISTORICO_PAGE_SIZE = 10;
+
 /**
- * Componente de busca assíncrona (typeahead) para ENTIDADE (clientes/produtos)
+ * Componente de busca assincrona (typeahead) para ENTIDADE (clientes/produtos)
  * Props principais:
  *  - entity: "clientes" | "produtos"
  *  - placeholder
@@ -165,7 +167,7 @@ function AsyncSearchBox({
   };
 
   const onBlur = () => {
-    // dá tempo de clicar no item da lista
+    // da tempo de clicar no item da lista
     blurTimer.current = setTimeout(() => setOpen(false), 120);
   };
   const onFocus = () => {
@@ -247,6 +249,9 @@ export default function Vendas() {
 
   const [itens, setItens] = useState([]);
   const [vendas, setVendas] = useState([]);
+  const [historicoPage, setHistoricoPage] = useState(1);
+  const [historicoHasMore, setHistoricoHasMore] = useState(false);
+  const [historicoLoading, setHistoricoLoading] = useState(false);
 
   const [descontoPerc, setDescontoPerc] = useState(0);
   const [acrescimoPerc, setAcrescimoPerc] = useState(0);
@@ -265,18 +270,44 @@ export default function Vendas() {
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState({ texto: "", tipo: "" });
 
-  // ---------- histórico ----------
-  async function carregarVendas() {
+  // ---------- historico ----------
+  const carregarVendas = useCallback(async () => {
+    setHistoricoLoading(true);
     try {
-      const resp = await api.get("/vendas", { params: { page: 1, per_page: 25 } });
-      setVendas(Array.isArray(resp.data) ? resp.data : resp.data?.items || []);
+      const skip = (historicoPage - 1) * HISTORICO_PAGE_SIZE;
+      const limit = HISTORICO_PAGE_SIZE + 1;
+      const resp = await api.get('/vendas', { params: { skip, limit } });
+      const data = Array.isArray(resp.data) ? resp.data : resp.data?.items || [];
+      if (data.length > HISTORICO_PAGE_SIZE) {
+        setHistoricoHasMore(true);
+        setVendas(data.slice(0, HISTORICO_PAGE_SIZE));
+      } else {
+        setHistoricoHasMore(false);
+        setVendas(data);
+      }
     } catch {
-      setMensagem({ texto: "Erro ao carregar vendas", tipo: "erro" });
+      setMensagem({ texto: 'Erro ao carregar vendas', tipo: 'erro' });
+      setVendas([]);
+      setHistoricoHasMore(false);
+    } finally {
+      setHistoricoLoading(false);
     }
-  }
+  }, [historicoPage]);
   useEffect(() => {
     carregarVendas();
-  }, []);
+  }, [carregarVendas]);
+
+  const handleHistoricoPrev = () => {
+    if (historicoPage > 1) {
+      setHistoricoPage((prev) => Math.max(1, prev - 1));
+    }
+  };
+
+  const handleHistoricoNext = () => {
+    if (historicoHasMore) {
+      setHistoricoPage((prev) => prev + 1);
+    }
+  };
 
   // ---------- estoque do produto selecionado ----------
   async function carregarEstoque(prodId) {
@@ -306,7 +337,7 @@ export default function Vendas() {
       return;
     }
     if (quantidade <= 0) {
-      setMensagem({ texto: "Quantidade inválida", tipo: "erro" });
+      setMensagem({ texto: "Quantidade invalida", tipo: "erro" });
       return;
     }
 
@@ -319,7 +350,7 @@ export default function Vendas() {
       const disponivel = estoqueAtual - reservado;
       if (quantidade > disponivel) {
         setMensagem({
-          texto: `Quantidade indisponível em estoque. Disponível: ${Math.max(
+          texto: `Quantidade indisponivel em estoque. Disponivel: ${Math.max(
             disponivel,
             0
           )} un.`,
@@ -339,13 +370,13 @@ export default function Vendas() {
       },
     ]);
 
-    // limpa seleção de produto e quantidade
+    // limpa selecao de produto e quantidade
     setProduto(null);
     setEstoqueAtual(null);
     setQuantidade(1);
   }
 
-  // atalho: código/código de barras + Enter
+  // atalho: codigo/codigo de barras + Enter
   const onSubmitCodigoProduto = async (raw) => {
     const t = raw.trim();
     if (!t) return;
@@ -359,7 +390,7 @@ export default function Vendas() {
         await carregarEstoque(list[0].id);
         adicionarItemComProduto(list[0]);
       } else {
-        setMensagem({ texto: "Produto não encontrado", tipo: "erro" });
+        setMensagem({ texto: "Produto nao encontrado", tipo: "erro" });
       }
     } catch {
       setMensagem({ texto: "Erro ao buscar produto", tipo: "erro" });
@@ -375,7 +406,7 @@ export default function Vendas() {
   const totalPagamentos = pagamentos.reduce((sum, p) => sum + Number(p.valor || 0), 0);
   const restante = totalFinal - totalPagamentos;
 
-  // Preenche o 1º pagamento com o total (ou o restante)
+  // Preenche o 1o pagamento com o total (ou o restante)
   useEffect(() => {
     if (!userEditouPagamentos.current) {
       setPagamentos((curr) => {
@@ -451,7 +482,7 @@ export default function Vendas() {
     return "bg-green-100 text-green-800";
   };
 
-  // disponível considerando itens já no carrinho
+  // disponivel considerando itens ja no carrinho
   const reservadoAtual = produto
     ? itens.filter((i) => i.produto_id === produto.id).reduce((s, i) => s + i.quantidade, 0)
     : 0;
@@ -495,7 +526,7 @@ export default function Vendas() {
                 {!cliente ? (
                   <AsyncSearchBox
                     entity="clientes"
-                    placeholder="Digite 2+ letras ou o código do cliente…"
+                    placeholder="Digite 2+ letras ou o codigo do cliente..."
                     minLen={2}
                     formatOption={(c) =>
                       `${c.codigo_cliente ? c.codigo_cliente + " - " : ""}${c.nome}${
@@ -512,7 +543,7 @@ export default function Vendas() {
                         {cliente.codigo_cliente ? `${cliente.codigo_cliente} - ` : ""}
                         {cliente.nome}
                       </span>
-                      {cliente.cpf_cnpj ? <span className="text-gray-500"> · {cliente.cpf_cnpj}</span> : null}
+                      {cliente.cpf_cnpj ? <span className="text-gray-500">  {cliente.cpf_cnpj}</span> : null}
                     </div>
                     <button
                       className="text-xs text-blue-600 hover:underline"
@@ -533,10 +564,10 @@ export default function Vendas() {
 
                 <AsyncSearchBox
                   entity="produtos"
-                  placeholder="Digite 2+ letras, código ou escaneie o código de barras…"
+                  placeholder="Digite 2+ letras, codigo ou escaneie o codigo de barras..."
                   minLen={2}
                   formatOption={(p) =>
-                    `${p.codigo_produto ? p.codigo_produto + " - " : ""}${p.nome} — R$ ${Number(
+                    `${p.codigo_produto ? p.codigo_produto + " - " : ""}${p.nome}  R$ ${Number(
                       p.preco_venda ?? 0
                     ).toFixed(2)}`
                   }
@@ -566,11 +597,11 @@ export default function Vendas() {
                   }
                 />
 
-                {/* Campo rápido para código de barras / Enter */}
+                {/* Campo rapido para codigo de barras / Enter */}
                 <input
                   type="text"
                   className="mt-2 w-full text-sm p-2 border border-gray-200 rounded-lg"
-                  placeholder="Ou digite/escaneie o CÓDIGO/CÓDIGO DE BARRAS e pressione Enter"
+                  placeholder="Ou digite/escaneie o CODIGO/CODIGO DE BARRAS e pressione Enter"
                   onKeyDown={async (e) => {
                     if (e.key === "Enter") {
                       await onSubmitCodigoProduto(e.currentTarget.value);
@@ -597,18 +628,18 @@ export default function Vendas() {
 
                     <div className="text-xs text-gray-700 flex items-center gap-3">
                       {estoqueLoading ? (
-                        <span className="text-gray-500">Carregando estoque…</span>
+                        <span className="text-gray-500">Carregando estoque...</span>
                       ) : typeof estoqueAtual === "number" ? (
                         <>
                           <span className={`px-2 py-0.5 rounded-full text-[11px] ${estoqueBadgeClass(estoqueAtual)}`}>
                             Saldo atual: {estoqueAtual} un.
                           </span>
                           <span className={`px-2 py-0.5 rounded-full text-[11px] ${estoqueBadgeClass(disponivel ?? 0)}`}>
-                            Disponível (− no carrinho): {disponivel} un.
+                            Disponivel ( no carrinho): {disponivel} un.
                           </span>
                         </>
                       ) : (
-                        <span className="text-gray-500">Saldo não disponível</span>
+                        <span className="text-gray-500">Saldo nao disponivel</span>
                       )}
                     </div>
                   </div>
@@ -656,9 +687,9 @@ export default function Vendas() {
                 </div>
               )}
 
-              {/* Observação */}
+              {/* Observacao */}
               <div className="mt-4">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Observação</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Observacao</label>
                 <textarea
                   className="w-full text-sm p-2 border border-gray-300 rounded-lg"
                   value={observacao}
@@ -667,7 +698,7 @@ export default function Vendas() {
                 />
               </div>
 
-              {/* Ações */}
+              {/* Acoes */}
               <div className="flex justify-end mt-4">
                 <button
                   onClick={async () => {
@@ -736,7 +767,10 @@ export default function Vendas() {
                       setPagamentos([
                         { forma_pagamento: "dinheiro", valor: "0.00", parcelas: 1, data_vencimento: hoje },
                       ]);
-                      carregarVendas();
+                      setHistoricoPage((prev) => (prev === 1 ? prev : 1));
+                      if (historicoPage === 1) {
+                        carregarVendas();
+                      }
                     } catch (err) {
                       setMensagem({
                         texto: err?.response?.data?.detail || "Erro ao salvar venda",
@@ -775,7 +809,7 @@ export default function Vendas() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span>Acréscimo (%)</span>
+                  <span>Acrescimo (%)</span>
                   <input
                     type="number"
                     className="w-24 text-sm p-2 border border-gray-300 rounded-lg text-right"
@@ -787,7 +821,7 @@ export default function Vendas() {
 
                 <hr className="my-2" />
 
-                {/* Cálculo aqui também (reflete ao vivo) */}
+                {/* Calculo aqui tambem (reflete ao vivo) */}
                 <ResumoTotais itens={itens} descontoPerc={descontoPerc} acrescimoPerc={acrescimoPerc} pagamentos={pagamentos} />
               </div>
 
@@ -808,37 +842,66 @@ export default function Vendas() {
           </div>
         </div>
 
-        {/* Histórico */}
+        {/* Historico */}
         <div className="bg-white rounded-xl shadow p-4 md:p-5 mt-4">
           <h2 className="text-md font-semibold mb-3 flex items-center">
-            <FiClock className="mr-2" /> Histórico de Vendas
+            <FiClock className="mr-2" /> Historico de Vendas
           </h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left">Data</th>
-                  <th className="px-4 py-2 text-left">Cliente</th>
-                  <th className="px-4 py-2 text-right">Total</th>
-                  <th className="px-4 py-2 text-left">Status</th>
-                  <th className="px-4 py-2 text-left">Observação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendas.map((v) => (
-                  <tr key={v.id} className="border-t">
-                    <td className="px-4 py-2">
-                      {new Date(v.data_venda).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
-                    </td>
-                    <td className="px-4 py-2">{v.cliente?.nome || "Sem cliente"}</td>
-                    <td className="px-4 py-2 text-right">R$ {Number(v.total).toFixed(2)}</td>
-                    <td className="px-4 py-2">{getStatus(v)}</td>
-                    <td className="px-4 py-2">{v.observacao || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {historicoLoading ? (
+            <div className="py-6 text-center text-sm text-gray-500">Carregando vendas...</div>
+          ) : vendas.length === 0 ? (
+            <div className="py-6 text-center text-sm text-gray-500">Nenhuma venda encontrada.</div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Data</th>
+                      <th className="px-4 py-2 text-left">Cliente</th>
+                      <th className="px-4 py-2 text-right">Total</th>
+                      <th className="px-4 py-2 text-left">Status</th>
+                      <th className="px-4 py-2 text-left">Observacao</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendas.map((v) => (
+                      <tr key={v.id} className="border-t">
+                        <td className="px-4 py-2">
+                          {new Date(v.data_venda).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                        </td>
+                        <td className="px-4 py-2">{v.cliente?.nome || "Sem cliente"}</td>
+                        <td className="px-4 py-2 text-right">R$ {Number(v.total).toFixed(2)}</td>
+                        <td className="px-4 py-2">{getStatus(v)}</td>
+                        <td className="px-4 py-2">{v.observacao || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-gray-500">
+                <div>
+                  Pagina <span className="font-semibold">{historicoPage}</span> mostrando <span className="font-semibold">{vendas.length}</span> vendas ({HISTORICO_PAGE_SIZE} por pagina)
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleHistoricoPrev}
+                    disabled={historicoPage === 1}
+                    className={`px-3 py-1 rounded-md ${historicoPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'}`}
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    onClick={handleHistoricoNext}
+                    disabled={!historicoHasMore}
+                    className={`px-3 py-1 rounded-md ${!historicoHasMore ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 transition'}`}
+                  >
+                    Proxima
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
       </div>
@@ -867,7 +930,7 @@ function ResumoTotais({ itens, descontoPerc, acrescimoPerc, pagamentos }) {
         <span>- R$ {descontoValor.toFixed(2)}</span>
       </div>
       <div className="flex items-center justify-between">
-        <span>Acréscimo</span>
+        <span>Acrescimo</span>
         <span>+ R$ {acrescimoValor.toFixed(2)}</span>
       </div>
       <div className="flex items-center justify-between font-semibold">
@@ -974,8 +1037,8 @@ function PagamentosEditor({
             onChange={(e) => atualizarPagamento(idx, "forma_pagamento", e.target.value)}
           >
             <option value="dinheiro">Dinheiro</option>
-            <option value="credito">Cartão de Crédito</option>
-            <option value="debito">Cartão de Débito</option>
+            <option value="credito">Cartao de Credito</option>
+            <option value="debito">Cartao de Debito</option>
             <option value="pix">PIX</option>
           </select>
 
@@ -992,7 +1055,7 @@ function PagamentosEditor({
             className="text-sm p-2 border border-gray-300 rounded-lg"
             value={p.parcelas}
             onChange={(e) => atualizarPagamento(idx, "parcelas", e.target.value)}
-            title="Quantidade de parcelas (1 = à vista)"
+            title="Quantidade de parcelas (1 = a vista)"
           />
 
           <input
@@ -1022,3 +1085,5 @@ function PagamentosEditor({
     </div>
   );
 }
+
+

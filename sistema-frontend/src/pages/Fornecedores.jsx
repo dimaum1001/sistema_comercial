@@ -1,295 +1,306 @@
-import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../services/api";
-import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch } from "react-icons/fi";
+import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import api from '../services/api'
+import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch } from 'react-icons/fi'
 
-// debounce simples
 function useDebounced(value, delay = 300) {
-  const [v, setV] = useState(value);
+  const [currentValue, setCurrentValue] = useState(value)
+
   useEffect(() => {
-    const t = setTimeout(() => setV(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return v;
+    const timer = setTimeout(() => setCurrentValue(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+
+  return currentValue
 }
 
-// máscaras
 function formatarCnpjCpf(valor) {
-  if (!valor) return "Não informado";
-  const n = String(valor).replace(/\D/g, "");
-  if (n.length === 11) return n.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  if (n.length === 14) return n.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-  return valor;
+  if (!valor) return 'Nao informado'
+  const digits = String(valor).replace(/[^0-9]/g, '')
+  if (digits.length === 11) {
+    return `***.***.***-${digits.slice(-2)}`
+  }
+  if (digits.length === 14) {
+    return `**.***.***/****-${digits.slice(-2)}`
+  }
+  if (digits.length > 4) {
+    const masked = '*'.repeat(digits.length - 4)
+    return `${masked}${digits.slice(-4)}`
+  }
+  return '*'.repeat(Math.max(0, digits.length - 1)) + digits.slice(-1)
 }
+
 function formatarTelefone(valor) {
-  if (!valor) return "Não informado";
-  const n = String(valor).replace(/\D/g, "");
-  if (n.length === 10) return n.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-  if (n.length === 11) return n.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
-  return valor;
+  if (!valor) return 'Nao informado'
+  const n = String(valor).replace(/\D/g, '')
+  if (n.length === 10) return n.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
+  if (n.length === 11) return n.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+  return valor
 }
 
 export default function Fornecedores() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [fornecedores, setFornecedores] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const debouncedSearch = useDebounced(searchTerm, 400)
 
-  // busca
-  const [searchTerm, setSearchTerm] = useState("");
-  const debounced = useDebounced(searchTerm, 400);
+  const [pageSize, setPageSize] = useState(10)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [totalCount, setTotalCount] = useState(null)
 
-  // paginação
-  const [pageSize, setPageSize] = useState(25); // 10, 25, 50, 100
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalCount, setTotalCount] = useState(null);
-
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   const fetchFornecedores = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token')
+
     if (!token) {
-      navigate("/login");
-      return;
+      navigate('/login')
+      return
     }
-    setLoading(true);
+
+    setLoading(true)
     try {
-      const { data, headers } = await api.get("/fornecedores", {
+      const offset = (page - 1) * pageSize
+      const limitPlusOne = pageSize + 1
+
+      const response = await api.get('/fornecedores', {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page, per_page: pageSize, q: debounced || undefined },
-      });
+        params: {
+          offset,
+          limit: limitPlusOne,
+          q: debouncedSearch || undefined,
+          search: debouncedSearch || undefined,
+          term: debouncedSearch || undefined,
+          nome: debouncedSearch || undefined,
+        },
+      })
 
-      const items = Array.isArray(data) ? data : [];
-      setRows(items);
-
-      // total pelos headers
-      let total = null;
-      const xTotal = headers?.["x-total-count"];
-      if (xTotal && !isNaN(parseInt(xTotal))) {
-        total = parseInt(xTotal);
-      } else if (headers?.["content-range"]) {
-        const parts = String(headers["content-range"]).split("/");
-        const n = parts?.[1] ? parseInt(parts[1]) : null;
-        if (!isNaN(n)) total = n;
-      }
-      if (typeof total === "number") {
-        setTotalCount(total);
-        setHasMore(page * pageSize < total);
+      const data = Array.isArray(response.data) ? response.data : []
+      if (data.length > pageSize) {
+        setHasMore(true)
+        setFornecedores(data.slice(0, pageSize))
       } else {
-        // fallback: se não houver header, estima com comprimento
-        setTotalCount(items.length);
-        setHasMore(items.length === pageSize);
+        setHasMore(false)
+        setFornecedores(data)
       }
     } catch (err) {
-      console.error("Erro ao buscar fornecedores:", err);
-      setRows([]);
-      setHasMore(false);
+      console.error('Erro ao buscar fornecedores:', err)
+      setHasMore(false)
+      setFornecedores([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [navigate, page, pageSize, debounced]);
+  }, [debouncedSearch, navigate, page, pageSize])
+
+  const fetchTotal = useCallback(async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    try {
+      const chunk = 1000
+      let offset = 0
+      let total = 0
+
+      for (let guard = 0; guard < 200; guard += 1) {
+        const resp = await api.get('/fornecedores', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { offset, limit: chunk },
+        })
+        const arr = Array.isArray(resp.data) ? resp.data : []
+        total += arr.length
+        if (arr.length < chunk) break
+        offset += chunk
+      }
+
+      setTotalCount(total)
+    } catch (error) {
+      console.error('Erro ao obter total de fornecedores:', error)
+      setTotalCount(null)
+    }
+  }, [])
 
   useEffect(() => {
-    // sempre que mudar busca, volta para página 1
-    setPage(1);
-  }, [debounced]);
+    fetchFornecedores()
+  }, [fetchFornecedores])
 
   useEffect(() => {
-    fetchFornecedores();
-  }, [fetchFornecedores]);
+    fetchTotal()
+  }, [fetchTotal])
+
+  const filteredFornecedores = fornecedores.filter((fornecedor) => {
+    const termo = searchTerm.toLowerCase()
+    const nome = (fornecedor.nome || fornecedor.razao_social || '').toLowerCase()
+    const cnpj = (fornecedor.cnpj_cpf || '').toLowerCase()
+    const email = (fornecedor.email || '').toLowerCase()
+    const telefone = (fornecedor.telefone || '').toLowerCase()
+    return nome.includes(termo) || cnpj.includes(termo) || email.includes(termo) || telefone.includes(termo)
+  })
 
   const handleDelete = async (id) => {
-    if (window.confirm("Tem certeza que deseja excluir este fornecedor?")) {
+    if (window.confirm('Tem certeza que deseja excluir este fornecedor?')) {
       try {
-        const token = localStorage.getItem("token");
-        await api.delete(`/fornecedores/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-        fetchFornecedores();
+        const token = localStorage.getItem('token')
+        await api.delete(`/fornecedores/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        fetchFornecedores()
+        fetchTotal()
       } catch (err) {
-        console.error("Erro ao excluir fornecedor:", err);
+        console.error('Erro ao excluir fornecedor:', err)
       }
     }
-  };
+  }
 
-  const handlePrev = () => page > 1 && setPage((p) => p - 1);
-  const handleNext = () => hasMore && setPage((p) => p + 1);
+  const handlePrev = () => {
+    if (page > 1) setPage((p) => p - 1)
+  }
+
+  const handleNext = () => {
+    if (hasMore) setPage((p) => p + 1)
+  }
+
   const handlePageSizeChange = (e) => {
-    setPageSize(Number(e.target.value));
-    setPage(1);
-  };
+    const newSize = Number(e.target.value)
+    setPageSize(newSize)
+    setPage(1)
+  }
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-pulse flex flex-col items-center">
-          <div className="h-12 w-12 bg-green-200 rounded-full mb-4" />
-          <div className="h-4 w-32 bg-green-200 rounded" />
+          <div className="h-12 w-12 bg-blue-200 rounded-full mb-4"></div>
+          <div className="h-4 w-32 bg-blue-200 rounded"></div>
         </div>
       </div>
-    );
+    )
   }
-
-  const paginaInfo = (
-    <span className="text-sm text-gray-600">
-      Página <span className="font-medium">{page}</span>
-      {" — mostrando "}
-      <span className="font-medium">{rows.length}</span>
-      {typeof totalCount === "number" && (
-        <> {" de "} <span className="font-medium">{totalCount}</span> registros</>
-      )}
-      {" ("}{pageSize} por página{")"}
-    </span>
-  );
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Top bar */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <h2 className="text-2xl font-bold text-gray-800">Fornecedores Cadastrados</h2>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-3">
+        <h2 className="text-2xl font-bold text-gray-800">Fornecedores Cadastrados</h2>
 
-          {/* Controles de paginação (TOPO) */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600">Mostrar</label>
-              <select
-                value={pageSize}
-                onChange={handlePageSizeChange}
-                className="border border-gray-300 rounded-md text-sm px-2 py-1 focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span className="text-sm text-gray-600">por página</span>
-            </div>
-
-            <div className="hidden md:inline-block h-5 w-px bg-gray-200" />
-
-            {paginaInfo}
-
-            <div className="hidden md:inline-block h-5 w-px bg-gray-200" />
-
-            <div className="flex space-x-2">
-              <button
-                onClick={handlePrev}
-                disabled={page === 1}
-                className={`px-3 py-1 rounded-md ${
-                  page === 1
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
-                }`}
-              >
-                Anterior
-              </button>
-              <button
-                onClick={handleNext}
-                disabled={!hasMore}
-                className={`px-3 py-1 rounded-md ${
-                  !hasMore
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-green-600 text-white hover:bg-green-700 transition"
-                }`}
-              >
-                Próxima
-              </button>
-            </div>
-
-            <div className="hidden md:inline-block h-5 w-px bg-gray-200" />
-
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Mostrar</label>
+            <select
+              value={pageSize}
+              onChange={handlePageSizeChange}
+              className="border border-gray-300 rounded-md text-sm px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <FiArrowLeft className="mr-2" />
-              Voltar
-            </button>
-            <button
-              onClick={() => navigate("/fornecedores/cadastrar")}
-              className="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-            >
-              <FiUserPlus className="mr-2" />
-              Novo Fornecedor
-            </button>
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span className="text-sm text-gray-600">por pagina</span>
           </div>
-        </div>
 
-        {/* busca */}
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <FiSearch className="text-gray-400" />
-          </div>
-          <input
-            type="text"
-            placeholder="Pesquisar por nome/razão, código, CNPJ/CPF, e-mail ou telefone…"
-            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
+          >
+            <FiArrowLeft className="mr-2" />
+            Voltar
+          </button>
+          <button
+            onClick={() => navigate('/fornecedores/cadastrar')}
+            className="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+          >
+            <FiUserPlus className="mr-2" />
+            Novo Fornecedor
+          </button>
         </div>
       </div>
 
-      {/* tabela */}
-      {rows.length === 0 ? (
-        <div className="bg-white p-8 rounded-xl shadow-sm text-center mt-4">
+      <div className="mb-6 relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <FiSearch className="text-gray-400" />
+        </div>
+        <input
+          type="text"
+          placeholder="Pesquisar fornecedores por nome, CNPJ/CPF, e-mail ou telefone..."
+          className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          value={searchTerm}
+          onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+        />
+      </div>
+
+      {filteredFornecedores.length === 0 ? (
+        <div className="bg-white p-8 rounded-xl shadow-sm text-center">
           <p className="text-gray-600 mb-4">
-            {debounced ? "Nenhum fornecedor encontrado para a pesquisa." : "Nenhum fornecedor nesta página."}
+            {searchTerm ? 'Nenhum fornecedor encontrado para a pesquisa nesta pagina.' : 'Nenhum fornecedor nesta pagina.'}
           </p>
           <button
-            onClick={() => navigate("/fornecedores/cadastrar")}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+            onClick={() => navigate('/fornecedores/cadastrar')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
           >
             Cadastrar Primeiro Fornecedor
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-md overflow-hidden mt-4">
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nome / Razão</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">CNPJ/CPF</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Telefone</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Data Cadastro</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Ações</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nome / Razao Social
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    CNPJ/CPF
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Telefone
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Data Cadastro
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acoes
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {rows.map((f) => {
-                  const nomeOuRazao = f.nome || f.razao_social || "—";
+                {filteredFornecedores.map((fornecedor) => {
+                  const nomeOuRazao = fornecedor.nome || fornecedor.razao_social || '-'
                   return (
-                    <tr key={f.id} className="hover:bg-gray-50 transition">
+                    <tr key={fornecedor.id} className="hover:bg-gray-50 transition">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
-                            <span className="text-green-600 font-medium">{(nomeOuRazao.charAt(0) || "?").toUpperCase()}</span>
+                          <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 font-medium">
+                              {(nomeOuRazao.charAt(0) || '?').toUpperCase()}
+                            </span>
                           </div>
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{nomeOuRazao}</div>
-                            <div className="text-sm text-gray-500">{f.email || "Sem e-mail"}</div>
+                            <div className="text-sm text-gray-500">{fornecedor.email || 'Sem e-mail'}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatarCnpjCpf(f.cnpj_cpf)}
+                        {formatarCnpjCpf(fornecedor.cnpj_cpf)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatarTelefone(f.telefone)}
+                        {formatarTelefone(fornecedor.telefone)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {f.criado_em ? new Date(f.criado_em).toLocaleDateString("pt-BR") : "—"}
+                        {fornecedor.criado_em ? new Date(fornecedor.criado_em).toLocaleDateString('pt-BR') : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end space-x-2">
                           <button
-                            onClick={() => navigate(`/fornecedores/editar/${f.id}`)}
+                            onClick={() => navigate(`/fornecedores/editar/${fornecedor.id}`)}
                             className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50 transition"
                             title="Editar"
                           >
                             <FiEdit />
                           </button>
                           <button
-                            onClick={() => handleDelete(f.id)}
+                            onClick={() => handleDelete(fornecedor.id)}
                             className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50 transition"
                             title="Excluir"
                           >
@@ -298,13 +309,49 @@ export default function Fornecedores() {
                         </div>
                       </td>
                     </tr>
-                  );
+                  )
                 })}
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white px-6 py-3 rounded-b-xl shadow-sm">
+        <div className="text-sm text-gray-500">
+          Pagina <span className="font-medium">{page}</span> mostrando{' '}
+          <span className="font-medium">{filteredFornecedores.length}</span> de{' '}
+          <span className="font-medium">{fornecedores.length}</span> registros carregados ({pageSize} por pagina)
+          {' | '}
+          <span className="font-medium">
+            Total geral: {typeof totalCount === 'number' ? totalCount : '--'}
+          </span>
+        </div>
+        <div className="flex space-x-2">
+          <button
+            onClick={handlePrev}
+            disabled={page === 1}
+            className={`px-3 py-1 rounded-md ${
+              page === 1
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'
+            }`}
+          >
+            Anterior
+          </button>
+          <button
+            onClick={handleNext}
+            disabled={!hasMore}
+            className={`px-3 py-1 rounded-md ${
+              !hasMore
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 transition'
+            }`}
+          >
+            Proxima
+          </button>
+        </div>
+      </div>
     </div>
-  );
+  )
 }

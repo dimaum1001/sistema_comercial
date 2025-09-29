@@ -54,7 +54,7 @@ export default function Relatorios() {
     setTab(t)
   }, [search])
 
-  // período padrão (mês corrente) + cargas iniciais
+  // periodo padrao (mes corrente) + cargas iniciais
   useEffect(() => {
     const today = new Date()
     const first = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -68,7 +68,7 @@ export default function Relatorios() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // entrar na aba estoque → primeira carga
+  // entrar na aba estoque  primeira carga
   useEffect(() => {
     if (tab === 'estoque' && !estoqueLoadedOnce) {
       fetchEstoque({ page: 1, perPage: stkPerPage, q: stkQ })
@@ -95,7 +95,7 @@ export default function Relatorios() {
       })
     } catch (e) {
       console.error('Erro ao carregar resumo de vendas:', e)
-      setErro('Não foi possível carregar resumo de vendas.')
+      setErro('Nao foi possivel carregar resumo de vendas.')
     }
   }
 
@@ -141,6 +141,33 @@ export default function Relatorios() {
     }
   }, [])
 
+  const obterTodosProdutosEstoque = useCallback(async (q) => {
+    const resultados = []
+    let page = 1
+    const perPage = 200
+
+    while (true) {
+      try {
+        const resp = await api.get('/relatorios/estoque-atual', {
+          params: { page, per_page: perPage, q: q || undefined },
+        })
+        const data = Array.isArray(resp.data) ? resp.data : []
+        resultados.push(...data)
+
+        const totalHeader = Number((resp.headers && resp.headers['x-total-count']) || 0)
+        if (data.length < perPage || (totalHeader && resultados.length >= totalHeader)) {
+          break
+        }
+
+        page += 1
+      } catch (error) {
+        throw error
+      }
+    }
+
+    return resultados
+  }, [])
+
   const carregarOutrosRelatorios = async (p) => {
     const useP = p || periodo
     try {
@@ -155,7 +182,7 @@ export default function Relatorios() {
         setRankingClientes(Array.isArray(rankingRes.value.data) ? rankingRes.value.data : [])
       }
     } catch (e) {
-      console.error('Erro ao carregar relatórios adicionais:', e)
+      console.error('Erro ao carregar relatorios adicionais:', e)
     }
   }
 
@@ -175,7 +202,8 @@ export default function Relatorios() {
   }
 
   // -------- PDF --------
-  const exportarPDF = async () => {
+  const exportarPDF = async (options = {}) => {
+    const { exportarTodosEstoque = false } = options
     const doc = new jsPDF()
     const titulos = {
       'vendas-resumo': 'Resumo de Vendas',
@@ -184,21 +212,21 @@ export default function Relatorios() {
       estoque: 'Estoque Atual',
       ranking: 'Ranking de Clientes'
     }
-    const titulo = `Relatório - ${titulos[tab]}`
+    const titulo = `Relatorio - ${titulos[tab]}`
     doc.setFontSize(14)
     doc.text(titulo, 14, 15)
     doc.setFontSize(10)
-    doc.text(`Período: ${periodo.inicio || '—'} → ${periodo.fim || '—'}`, 14, 22)
+    doc.text(`Periodo: ${periodo.inicio || ''}  ${periodo.fim || ''}`, 14, 22)
     const startY = 28
 
     if (tab === 'vendas-resumo') {
       const f = resumoVendas.totais_por_forma || {}
       autoTable(doc, {
         startY,
-        head: [['Métrica', 'Valor']],
+        head: [['Metrica', 'Valor']],
         body: [
           ['Quantidade de Vendas', fmtInt(resumoVendas.qtd_vendas)],
-          ['Total do Período', fmtBRL(resumoVendas.total_vendas)],
+          ['Total do Periodo', fmtBRL(resumoVendas.total_vendas)],
         ]
       })
       autoTable(doc, {
@@ -206,8 +234,8 @@ export default function Relatorios() {
         head: [['Forma de Pagamento', 'Total']],
         body: [
           ['Dinheiro', fmtBRL(f.dinheiro || 0)],
-          ['Crédito', fmtBRL(f.credito || 0)],
-          ['Débito', fmtBRL(f.debito || 0)],
+          ['Credito', fmtBRL(f.credito || 0)],
+          ['Debito', fmtBRL(f.debito || 0)],
           ['PIX', fmtBRL(f.pix || 0)],
           ['Outros', fmtBRL(f.outros || 0)],
         ]
@@ -218,37 +246,49 @@ export default function Relatorios() {
         head: [['Data', 'Cliente', 'Total', 'Pagamento(s)', 'Itens']],
         body: vdItens.map((v) => [
           v.data_venda,
-          v.cliente || '—',
+          v.cliente || '',
           fmtBRL(v.total),
           (v.pagamentos?.length
             ? v.pagamentos.map(p => `${(p.forma || p.forma_pagamento || '').toUpperCase()} ${fmtBRL(p.valor)}`).join(' + ')
-            : (v.formas?.join(', ').toUpperCase() || '—')),
+            : (v.formas?.join(', ').toUpperCase() || '')),
           v.itens?.map((i) => `${i.produto} (x${i.quantidade})`).join(', ')
         ])
       })
     } else if (tab === 'produtos') {
       autoTable(doc, {
         startY,
-        head: [['Produto', 'Código', 'Quantidade', 'Faturamento']],
+        head: [['Produto', 'Codigo', 'Quantidade', 'Faturamento']],
         body: produtosMaisVendidos.map((item) => [
           item.produto,
-          item.codigo ?? '—',
+          item.codigo ?? '',
           fmtInt(item.quantidade),
           fmtBRL(item.faturamento)
         ])
       })
     } else if (tab === 'estoque') {
+      let dadosEstoque = Array.isArray(stkItens) ? stkItens : []
+      if (exportarTodosEstoque) {
+        try {
+          dadosEstoque = await obterTodosProdutosEstoque(stkQ)
+        } catch (error) {
+          console.error('Erro ao preparar exportacao completa do estoque:', error)
+          window.alert('Nao foi possivel carregar todos os produtos. Os dados exibidos na tela serao exportados.')
+          dadosEstoque = Array.isArray(stkItens) ? stkItens : []
+        }
+      }
+
       autoTable(doc, {
         startY,
-        head: [['Produto', 'Código', 'Estoque', 'Estoque Mínimo', 'Alerta']],
-        body: (stkItens || []).map((p) => [
+        head: [['Produto', 'Codigo', 'Estoque', 'Estoque Minimo', 'Alerta']],
+        body: (dadosEstoque || []).map((p) => [
           p.produto,
-          p.codigo ?? '—',
+          p.codigo ?? '',
           fmtInt(p.estoque),
           fmtInt(p.estoque_minimo),
           p.alerta ? 'Baixo' : 'OK'
         ])
       })
+
     } else if (tab === 'ranking') {
       autoTable(doc, {
         startY,
@@ -281,6 +321,7 @@ export default function Relatorios() {
     const totalPages = Math.max(1, Math.ceil(total / perPage))
     const canPrev = page > 1
     const canNext = page < totalPages
+    const isEstoque = tab === 'estoque'
     return (
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -294,28 +335,42 @@ export default function Relatorios() {
               <option key={n} value={n}>{n}</option>
             ))}
           </select>
-          <span>por página</span>
+          <span>por pagina</span>
           <span className="ml-4">
-            Página <b>{page}</b> — mostrando <b>{showing}</b> de <b>{Math.max(totalPages, 1)}</b>
+            Pagina <b>{page}</b> mostrando <b>{showing}</b> de <b>{Math.max(totalPages, 1)}</b>
           </span>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onPrev} disabled={!canPrev} className={`px-3 py-1 rounded border ${canPrev ? 'bg-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>Anterior</button>
-          <button onClick={onNext} disabled={!canNext} className={`px-3 py-1 rounded border ${canNext ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>Próxima</button>
-          <button onClick={exportarPDF} className="ml-2 px-3 py-1 rounded bg-green-600 text-white">PDF</button>
+          <button onClick={onNext} disabled={!canNext} className={`px-3 py-1 rounded border ${canNext ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>Proxima</button>
+          <button
+            onClick={() => exportarPDF()}
+            className={`px-3 py-1 rounded bg-green-600 text-white ${isEstoque ? '' : 'ml-2'}`}
+          >
+            {isEstoque ? 'Exportar PDF (tela atual)' : 'PDF'}
+          </button>
+          {isEstoque && (
+            <button
+              onClick={() => exportarPDF({ exportarTodosEstoque: true })}
+              className="px-3 py-1 rounded bg-green-700 text-white ml-2"
+            >
+              Exportar todos os produtos do sistema
+            </button>
+          )}
         </div>
       </div>
     )
   }
 
+
   const HeaderPeriodo = () => (
     <div className="bg-white shadow-md rounded px-6 pt-5 pb-6 mb-6">
-      <h3 className="text-xl font-semibold mb-4">Período</h3>
+      <h3 className="text-xl font-semibold mb-4">Periodo</h3>
       <div className="flex flex-wrap items-end gap-4 mb-4">
         <input type="date" name="inicio" value={periodo.inicio} onChange={handlePeriodoChange} className="shadow border rounded py-2 px-3" />
         <input type="date" name="fim" value={periodo.fim} onChange={handlePeriodoChange} className="shadow border rounded py-2 px-3" />
         <button onClick={aplicarPeriodo} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded">
-          {loading ? 'Atualizando...' : 'Aplicar período'}
+          {loading ? 'Atualizando...' : 'Aplicar periodo'}
         </button>
         <button onClick={exportarPDF} className="bg-green-600 text-white px-4 py-2 rounded">Exportar PDF</button>
       </div>
@@ -340,7 +395,7 @@ export default function Relatorios() {
 
   return (
     <div className="container mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">Relatórios</h2>
+      <h2 className="text-2xl font-bold mb-4">Relatorios</h2>
       <Tabs />
 
       {tab === 'vendas-resumo' && (
@@ -356,8 +411,8 @@ export default function Relatorios() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {[
                   ['Dinheiro', resumoVendas.totais_por_forma.dinheiro],
-                  ['Crédito', resumoVendas.totais_por_forma.credito],
-                  ['Débito', resumoVendas.totais_por_forma.debito],
+                  ['Credito', resumoVendas.totais_por_forma.credito],
+                  ['Debito', resumoVendas.totais_por_forma.debito],
                   ['PIX', resumoVendas.totais_por_forma.pix],
                   ['Outros', resumoVendas.totais_por_forma.outros],
                 ].map(([label, val]) => (
@@ -399,16 +454,16 @@ export default function Relatorios() {
                   {vdItens.map((v) => (
                     <tr key={v.id} className="border-top">
                       <td className="py-2 px-3">{v.data_venda}</td>
-                      <td className="py-2 px-3">{v.cliente || '—'}</td>
+                      <td className="py-2 px-3">{v.cliente || ''}</td>
                       <td className="py-2 px-3 text-right">{fmtBRL(v.total)}</td>
                       <td className="py-2 px-3">
                         {v.pagamentos?.length
                           ? v.pagamentos.map((p, ix) => (
                               <div key={ix}>
-                                {(p.forma || p.forma_pagamento || '').toUpperCase()} — {fmtBRL(p.valor)}
+                                {(p.forma || p.forma_pagamento || '').toUpperCase()}  {fmtBRL(p.valor)}
                               </div>
                             ))
-                          : (v.formas?.join(', ').toUpperCase() || '—')}
+                          : (v.formas?.join(', ').toUpperCase() || '')}
                       </td>
                       <td className="py-2 px-3">
                         {v.itens?.map((i, ix) => (
@@ -420,7 +475,7 @@ export default function Relatorios() {
                   {!vdLoading && vdItens.length === 0 && (
                     <tr>
                       <td colSpan={5} className="text-center py-4 text-gray-500">
-                        Nenhuma venda encontrada neste período.
+                        Nenhuma venda encontrada neste periodo.
                       </td>
                     </tr>
                   )}
@@ -441,7 +496,7 @@ export default function Relatorios() {
                 <thead>
                   <tr>
                     <th>Produto</th>
-                    <th>Código</th>
+                    <th>Codigo</th>
                     <th className="text-right">Quantidade</th>
                     <th className="text-right">Faturamento</th>
                   </tr>
@@ -481,7 +536,7 @@ export default function Relatorios() {
           <div className="mb-3">
             <input
               className="border rounded px-3 py-2 w-full md:w-96"
-              placeholder="Buscar por nome/código…"
+              placeholder="Buscar por nome/codigo..."
               value={stkQ}
               onChange={(e) => setStkQ(e.target.value)}
               onKeyDown={(e) => {
@@ -495,9 +550,9 @@ export default function Relatorios() {
               <thead>
                 <tr className="text-left">
                   <th className="py-2 px-4">Produto</th>
-                  <th className="py-2 px-4">Código</th>
+                  <th className="py-2 px-4">Codigo</th>
                   <th className="py-2 px-4 text-right">Estoque</th>
-                  <th className="py-2 px-4 text-right">Estoque Mínimo</th>
+                  <th className="py-2 px-4 text-right">Estoque Minimo</th>
                   <th className="py-2 px-4 text-center">Alerta</th>
                 </tr>
               </thead>
@@ -560,3 +615,4 @@ export default function Relatorios() {
     </div>
   )
 }
+

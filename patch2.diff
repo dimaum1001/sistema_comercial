@@ -1,0 +1,40 @@
+﻿*** Begin Patch
+*** Update File: sistema-frontend/src/pages/Relatorios.jsx
+@@
+-    } else if (tab === 'estoque') {
+-      autoTable(doc, {
+-        startY,
+-        head: [['Produto', 'Código', 'Estoque', 'Estoque Mínimo', 'Alerta']],
+-        body: (stkItens || []).map((p) => [
+-          p.produto,
+-          p.codigo ?? '—',
+-          fmtInt(p.estoque),
+-          fmtInt(p.estoque_minimo),
+-          p.alerta ? 'Baixo' : 'OK'
+-        ])
+-      })
++    } else if (tab === 'estoque') {
++      let dadosEstoque = Array.isArray(stkItens) ? stkItens : []
++      try {
++        const exportarTodos = window.confirm('Deseja exportar TODOS os produtos do estoque? Clique em Cancelar para exportar apenas os produtos exibidos na tela.')
++        if (exportarTodos) {
++          dadosEstoque = await obterTodosProdutosEstoque(stkQ)
++        }
++      } catch (error) {
++        console.error('Erro ao preparar exportação completa do estoque:', error)
++        window.alert('Não foi possível carregar todos os produtos. Os dados exibidos na tela serão exportados.')
++        dadosEstoque = Array.isArray(stkItens) ? stkItens : []
++      }
++
++      autoTable(doc, {
++        startY,
++        head: [['Produto', 'Código', 'Estoque', 'Estoque Mínimo', 'Alerta']],
++        body: (dadosEstoque || []).map((p) => [
++          p.produto,
++          p.codigo ?? '—',
++          fmtInt(p.estoque),
++          fmtInt(p.estoque_minimo),
++          p.alerta ? 'Baixo' : 'OK'
++        ])
++      })
+*** End Patch

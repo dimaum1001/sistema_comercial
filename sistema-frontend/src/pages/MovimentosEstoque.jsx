@@ -196,6 +196,7 @@ function AsyncSearchBox({
             {hasMore && (
               <li className="px-3 py-2 text-center">
                 <button
+                  type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => setPage((p) => p + 1)}
                   className="text-xs text-blue-600 hover:underline"
@@ -543,3 +544,4 @@ export default function MovimentosEstoque() {
     </div>
   );
 }
+

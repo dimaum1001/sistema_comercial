@@ -8,11 +8,12 @@ from pydantic import ConfigDict
 # Base Produto
 # ========================
 class ProdutoBase(BaseModel):
-    # 🔹 Incluímos codigo_produto para alinhar com NOT NULL/UNIQUE do banco
+    # Mantemos opcional (o backend gera quando ausente)
     codigo_produto: Optional[str] = None
     nome: Optional[str] = None
     codigo_barras: Optional[str] = None
     custo: Optional[float] = None
+    preco_venda: Optional[float] = None  # <- já aqui para evitar repetição
     estoque: Optional[int] = None
     estoque_minimo: Optional[int] = None
     unidade: Optional[str] = None
@@ -20,15 +21,21 @@ class ProdutoBase(BaseModel):
     localizacao: Optional[str] = None
     data_validade: Optional[date] = None
     ativo: Optional[bool] = True
+
+    # Relacionamentos/refs
     categoria_id: Optional[UUID] = None
     fornecedor_id: Optional[UUID] = None
 
+    # 🔹 Campo texto que existe no Model (nome livre do fornecedor)
+    fornecedor: Optional[str] = None
+
 class ProdutoCreate(ProdutoBase):
+    # nome obrigatório na criação
     nome: str
-    preco_venda: Optional[float] = None
 
 class ProdutoUpdate(ProdutoBase):
-    preco_venda: Optional[float] = None
+    # tudo opcional (atualização parcial via PUT/PATCH no backend)
+    pass
 
 # ========================
 # Produto Resumido (uso em Preço)
@@ -53,7 +60,8 @@ class PrecoProdutoOut(BaseModel):
     data_inicio: datetime
     data_fim: Optional[datetime] = None
     ativo: bool
-    produto: Optional[ProdutoResumo]  # inclui dados básicos do produto
+    # Mantemos opcional: será carregado se o backend fizer joinedload ou via lazy
+    produto: Optional[ProdutoResumo] = None
     model_config = ConfigDict(from_attributes=True)
 
 # ========================
@@ -64,7 +72,6 @@ class FornecedorOut(BaseModel):
     nome: str
     model_config = ConfigDict(from_attributes=True)
 
-# (Opcional) Categoria no output, se você quiser expor o objeto também
 class CategoriaOut(BaseModel):
     id: UUID
     nome: Optional[str] = None
@@ -76,22 +83,14 @@ class CategoriaOut(BaseModel):
 class ProdutoOut(ProdutoBase):
     id: UUID
     codigo_produto: str
-    preco_venda: Optional[float]
     criado_em: datetime
     atualizado_em: datetime
 
-    # ✅ Pegamos a relação ORM `fornecedor_obj` e serializamos como "fornecedor"
-    fornecedor_obj: Optional[FornecedorOut] = Field(
-        default=None,
-        serialization_alias="fornecedor"
-    )
+    # ✅ Relacionamentos completos (sem alias para não conflitar com `fornecedor` texto)
+    fornecedor_obj: Optional[FornecedorOut] = None
+    categoria: Optional[CategoriaOut] = None
 
-    # (Opcional) Se sua relação chama `categoria`, serialize como "categoria"
-    # categoria: Optional[CategoriaOut] = None
-    # Se no ORM o nome for `categoria` está ok; se for `categoria_obj`, use:
-    # categoria_obj: Optional[CategoriaOut] = Field(default=None, serialization_alias="categoria")
-
-    # Evitar lista mutável como default
+    # Histórico de preços
     precos: List[PrecoProdutoOut] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)

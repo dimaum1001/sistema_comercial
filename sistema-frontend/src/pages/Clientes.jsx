@@ -3,13 +3,29 @@ import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch } from 'react-icons/fi'
 
+function maskCpfCnpj(valor) {
+  if (!valor) return 'Nao informado'
+  const digits = String(valor).replace(/[^0-9]/g, '')
+  if (digits.length === 11) {
+    return `***.***.***-${digits.slice(-2)}`
+  }
+  if (digits.length === 14) {
+    return `**.***.***/****-${digits.slice(-2)}`
+  }
+  if (digits.length > 4) {
+    const masked = '*'.repeat(digits.length - 4)
+    return `${masked}${digits.slice(-4)}`
+  }
+  return '*'.repeat(Math.max(0, digits.length - 1)) + digits.slice(-1)
+}
+
 export default function Clientes() {
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
 
-  // paginação
-  const [pageSize, setPageSize] = useState(25) // 10, 25, 50, 100
+  // paginacao
+  const [pageSize, setPageSize] = useState(10) // 10, 25, 50, 100
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
 
@@ -53,7 +69,7 @@ export default function Clientes() {
     }
   }, [navigate, page, pageSize])
 
-  // Conta o total geral com várias requisições (robusto, sem depender de headers)
+  // Conta o total geral com varias requisicoes (robusto, sem depender de headers)
   const fetchTotal = useCallback(async () => {
     const token = localStorage.getItem('token')
     if (!token) return
@@ -105,7 +121,7 @@ export default function Clientes() {
         await api.delete(`/clientes/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-        // recarrega a página atual e o total geral
+        // recarrega a pagina atual e o total geral
         fetchClientes()
         fetchTotal()
       } catch (err) {
@@ -125,7 +141,7 @@ export default function Clientes() {
   const handlePageSizeChange = (e) => {
     const newSize = Number(e.target.value)
     setPageSize(newSize)
-    setPage(1) // volta para a primeira página ao mudar o tamanho
+    setPage(1) // volta para a primeira pagina ao mudar o tamanho
   }
 
   if (loading) {
@@ -145,7 +161,7 @@ export default function Clientes() {
         <h2 className="text-2xl font-bold text-gray-800">Clientes Cadastrados</h2>
 
         <div className="flex items-center gap-3">
-          {/* seletor de quantidade por página */}
+          {/* seletor de quantidade por pagina */}
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-600">Mostrar</label>
             <select
@@ -158,7 +174,7 @@ export default function Clientes() {
               <option value={50}>50</option>
               <option value={100}>100</option>
             </select>
-            <span className="text-sm text-gray-600">por página</span>
+            <span className="text-sm text-gray-600">por pagina</span>
           </div>
 
           <button
@@ -195,7 +211,7 @@ export default function Clientes() {
       {filteredClientes.length === 0 ? (
         <div className="bg-white p-8 rounded-xl shadow-sm text-center">
           <p className="text-gray-600 mb-4">
-            {searchTerm ? 'Nenhum cliente encontrado para a pesquisa nesta página.' : 'Nenhum cliente nesta página.'}
+            {searchTerm ? 'Nenhum cliente encontrado para a pesquisa nesta pagina.' : 'Nenhum cliente nesta pagina.'}
           </p>
           <button
             onClick={() => navigate('/clientes/novo')}
@@ -223,7 +239,7 @@ export default function Clientes() {
                     Data Cadastro
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ações
+                    Acoes
                   </th>
                 </tr>
               </thead>
@@ -244,13 +260,13 @@ export default function Clientes() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {cliente.cpf || cliente.cpf_cnpj || 'Não informado'}
+                      {maskCpfCnpj(cliente.cpf || cliente.cpf_cnpj)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {cliente.telefone || 'Não informado'}
+                      {cliente.telefone || 'Nao informado'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {cliente.criado_em ? new Date(cliente.criado_em).toLocaleDateString('pt-BR') : '—'}
+                      {cliente.criado_em ? new Date(cliente.criado_em).toLocaleDateString('pt-BR')  : '--'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
@@ -278,15 +294,15 @@ export default function Clientes() {
         </div>
       )}
 
-      {/* Paginação + total (Total geral SEMPRE vem do banco) */}
+      {/* Paginacao + total (Total geral SEMPRE vem do banco) */}
       <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white px-6 py-3 rounded-b-xl shadow-sm">
         <div className="text-sm text-gray-500">
-          Página <span className="font-medium">{page}</span> — mostrando{' '}
+          Pagina <span className="font-medium">{page}</span> mostrando{' '}
           <span className="font-medium">{filteredClientes.length}</span> de{' '}
-          <span className="font-medium">{clientes.length}</span> registros carregados ({pageSize} por página)
-          {' — '}
+          <span className="font-medium">{clientes.length}</span> registros carregados ({pageSize} por pagina)
+          {' | '}
           <span className="font-medium">
-            Total geral: {typeof totalCount === 'number' ? totalCount : '—'}
+            Total geral: {typeof totalCount === 'number' ? totalCount : '--'}
           </span>
         </div>
         <div className="flex space-x-2">
@@ -310,10 +326,14 @@ export default function Clientes() {
                 : 'bg-blue-600 text-white hover:bg-blue-700 transition'
             }`}
           >
-            Próxima
+            Proxima
           </button>
         </div>
       </div>
     </div>
   )
 }
+
+
+
+

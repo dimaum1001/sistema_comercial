@@ -21,6 +21,7 @@ import ContasReceber from './pages/ContasReceber'
 // 🔹 Novas páginas
 import ContasPagar from './pages/ContasPagar'
 import Relatorios from './pages/Relatorios'
+import ProdutoEditar from './pages/ProdutoEditar'
 
 // --------- Controle reativo de autenticação ----------
 function Private({ children }) {
@@ -85,6 +86,8 @@ export default function App() {
         <Route path="/usuarios/novo" element={<UsuarioNovo />} />
         <Route path="/usuarios/editar/:id" element={<UsuarioEditar />} />
         <Route path="/produtos/precos" element={<PrecosProdutos />} />
+        <Route path="/produtos/editar/:id" element={<ProdutoEditar />} />
+
 
         {/* Vendas & Estoque */}
         <Route path="/vendas" element={<Vendas />} />
