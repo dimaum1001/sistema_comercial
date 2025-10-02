@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
-import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiArrowLeft, FiBox } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiArrowLeft, FiBox, FiFilter, FiXCircle } from 'react-icons/fi'
 
 function useDebounced(value, delay = 300) {
   const [currentValue, setCurrentValue] = useState(value)
@@ -36,6 +36,19 @@ const fmtBRL = (value) =>
     ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
     : '-'
 
+const normalizeMoneyInput = (value) => {
+  if (!value) return ''
+  const normalized = value.replace(/[^0-9.,-]/g, '').replace(',', '.')
+  return normalized
+}
+
+const parseMoneyToNumber = (value) => {
+  if (!value) return null
+  const normalized = value.replace(/[^0-9.,-]/g, '').replace(',', '.')
+  const numeric = Number(normalized)
+  return Number.isNaN(numeric) ? null : numeric
+}
+
 export default function Produtos() {
   const navigate = useNavigate()
 
@@ -48,7 +61,35 @@ export default function Produtos() {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
   const [totalCount, setTotalCount] = useState(null)
+  const [categorias, setCategorias] = useState([])
+  const [categoriasLoading, setCategoriasLoading] = useState(false)
+  const [filters, setFilters] = useState({
+    categoria: 'all',
+    estoque: 'all',
+    precoMin: '',
+    precoMax: '',
+    ativo: 'all',
+  })
 
+  const filtersKey = JSON.stringify(filters)
+
+
+  useEffect(() => {
+    const loadCategorias = async () => {
+      try {
+        setCategoriasLoading(true)
+        const resp = await api.get('/categorias', { params: { per_page: 200 } })
+        const lista = Array.isArray(resp?.data) ? resp.data : resp?.data?.items || []
+        setCategorias(lista)
+      } catch (error) {
+        console.error('Erro ao carregar categorias', error)
+      } finally {
+        setCategoriasLoading(false)
+      }
+    }
+
+    loadCategorias()
+  }, [])
   const fetchTotalFallback = useCallback(async (token, term) => {
     if (!token) return null
     const query = (term || '').trim()
@@ -82,7 +123,40 @@ export default function Produtos() {
     return null
   }, [])
 
-  const fetchProdutos = useCallback(async () => {
+    const handleFilterChange = (field, value) => {
+    setFilters((prev) => ({ ...prev, [field]: value }))
+    setPage(1)
+  }
+
+  const handlePriceChange = (field) => (event) => {
+    const normalized = normalizeMoneyInput(event.target.value)
+    handleFilterChange(field, normalized)
+  }
+
+  const handleSelectChange = (field) => (event) => {
+    handleFilterChange(field, event.target.value)
+  }
+
+  const clearFilters = () => {
+    setFilters({ categoria: 'all', estoque: 'all', precoMin: '', precoMax: '', ativo: 'all' })
+    setPage(1)
+  }
+
+  const hasActiveFilters =
+    filters.categoria !== 'all' ||
+    filters.estoque !== 'all' ||
+    filters.precoMin !== '' ||
+    filters.precoMax !== '' ||
+    filters.ativo !== 'all'
+
+  const activeFiltersCount =
+    (filters.categoria !== 'all' ? 1 : 0) +
+    (filters.estoque !== 'all' ? 1 : 0) +
+    (filters.precoMin !== '' ? 1 : 0) +
+    (filters.precoMax !== '' ? 1 : 0) +
+    (filters.ativo !== 'all' ? 1 : 0)
+
+const fetchProdutos = useCallback(async () => {
     const token = localStorage.getItem('token')
 
     if (!token) {
@@ -96,16 +170,42 @@ export default function Produtos() {
       const limitPlusOne = pageSize + 1
       const searchValue = debouncedSearch.trim()
 
+      const params = {
+        offset,
+        limit: limitPlusOne,
+        q: searchValue || undefined,
+        search: searchValue || undefined,
+        term: searchValue || undefined,
+        nome: searchValue || undefined,
+      }
+
+      if (filters.categoria !== 'all') {
+        params.categoria_id = filters.categoria
+      }
+
+      if (filters.estoque !== 'all') {
+        params.estoque_status = filters.estoque
+      }
+
+      const precoMinNumber = parseMoneyToNumber(filters.precoMin)
+      if (precoMinNumber !== null) {
+        params.preco_min = precoMinNumber
+      }
+
+      const precoMaxNumber = parseMoneyToNumber(filters.precoMax)
+      if (precoMaxNumber !== null) {
+        params.preco_max = precoMaxNumber
+      }
+
+      if (filters.ativo === 'ativos') {
+        params.ativo = true
+      } else if (filters.ativo === 'inativos') {
+        params.ativo = false
+      }
+
       const response = await api.get('/produtos', {
         headers: { Authorization: `Bearer ${token}` },
-        params: {
-          offset,
-          limit: limitPlusOne,
-          q: searchValue || undefined,
-          search: searchValue || undefined,
-          term: searchValue || undefined,
-          nome: searchValue || undefined,
-        },
+        params,
       })
 
       const rawData = response?.data ?? []
@@ -131,7 +231,7 @@ export default function Produtos() {
           ? rawData.count
           : null)
 
-      if (total == null) {
+      if (total == null && !hasActiveFilters) {
         total = await fetchTotalFallback(token, searchValue)
       }
 
@@ -145,17 +245,22 @@ export default function Produtos() {
         setTotalCount(null)
       }
 
-      setMessage((prev) => (prev?.tipo === 'erro' ? null : prev))
+      if (list.length === 0 && total === 0) {
+        setMessage({ tipo: 'info', texto: 'Nenhum produto encontrado para os filtros atuais.' })
+      } else {
+        setMessage(null)
+      }
     } catch (error) {
-      console.error('Erro ao carregar produtos:', error)
+      console.error('Erro ao carregar produtos', error)
       setProdutos([])
       setHasMore(false)
       setTotalCount(null)
-      setMessage({ tipo: 'erro', texto: 'Erro ao carregar produtos' })
+      setMessage({ tipo: 'erro', texto: 'Erro ao carregar produtos.' })
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, fetchTotalFallback, navigate, page, pageSize])
+  }, [debouncedSearch, fetchTotalFallback, filtersKey, navigate, page, pageSize])
+
 
   useEffect(() => {
     fetchProdutos()
@@ -266,6 +371,8 @@ export default function Produtos() {
           className={`mb-4 p-3 rounded border ${
             message.tipo === 'erro'
               ? 'bg-red-100 border-red-300 text-red-700'
+              : message.tipo === 'info'
+              ? 'bg-blue-100 border-blue-300 text-blue-700'
               : 'bg-green-100 border-green-300 text-green-700'
           }`}
         >
@@ -279,7 +386,7 @@ export default function Produtos() {
         </div>
         <input
           type="text"
-          placeholder="Pesquisar produtos por nome, categoria, fornecedor, marca ou codigo..."
+          placeholder="Pesquisar produtos por nome, categoria, fornecedor, marca ou código..."
           className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           value={searchTerm}
           onChange={(e) => {
@@ -436,7 +543,7 @@ export default function Produtos() {
 
       <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white px-6 py-3 rounded-b-xl shadow-sm">
         <div className="text-sm text-gray-500">
-          Pagina <span className="font-medium">{currentPage}</span>{' '}
+          Página <span className="font-medium">{currentPage}</span>{' '}
           {produtos.length > 0 && typeof totalCount === 'number' ? (
             <>
               mostrando <span className="font-medium">{rangeStart}-{rangeEnd}</span>{' '}
@@ -445,7 +552,7 @@ export default function Produtos() {
           ) : (
             <>mostrando <span className="font-medium">{produtos.length}</span> produtos</>
           )}{' '}
-          ({pageSize} por pagina) {' | '}
+          ({pageSize} por página) {' | '}
           <span className="font-medium">
             Total geral: {typeof totalCount === 'number' ? totalCount : '--'}
           </span>

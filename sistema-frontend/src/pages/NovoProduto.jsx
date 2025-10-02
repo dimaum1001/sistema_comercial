@@ -12,17 +12,26 @@ import {
   FiTruck,
 } from 'react-icons/fi'
 
+const INITIAL_FORM = {
+  nome: '',
+  preco_venda: '',
+  custo: '',
+  estoque: '',
+  estoque_minimo: '',
+  unidade: '',
+  marca: '',
+  localizacao: '',
+  data_validade: '',
+  codigo_barras: '',
+  categoria_id: '',
+  fornecedor_id: '',
+  fornecedor_texto: '',
+  ativo: true
+}
+
 export default function NovoProduto() {
   const navigate = useNavigate()
-  const [formData, setFormData] = useState({
-    nome: '',
-    preco_venda: '',
-    custo: '',
-    estoque: '',
-    codigo_barras: '',
-    categoria_id: '',
-    fornecedor_id: ''
-  })
+  const [formData, setFormData] = useState(INITIAL_FORM)
   const [categorias, setCategorias] = useState([])
   const [fornecedores, setFornecedores] = useState([])
   const [novaCategoria, setNovaCategoria] = useState('')
@@ -72,6 +81,10 @@ export default function NovoProduto() {
     }))
   }
 
+  const handleAtivoChange = (e) => {
+    setFormData((prev) => ({ ...prev, ativo: e.target.checked }))
+  }
+
   // Salvar nova categoria
   const salvarCategoria = async () => {
     if (!novaCategoria.trim()) return
@@ -104,14 +117,34 @@ export default function NovoProduto() {
     try {
       const token = localStorage.getItem('token')
 
+      const parseDecimal = (value) => {
+        if (!value) return null
+        const normalized = String(value).replace(',', '.').trim()
+        const parsed = Number.parseFloat(normalized)
+        return Number.isNaN(parsed) ? null : parsed
+      }
+
+      const parseInteger = (value) => {
+        if (!value && value !== 0) return null
+        const parsed = Number.parseInt(value, 10)
+        return Number.isNaN(parsed) ? null : parsed
+      }
+
       const payload = {
-        nome: formData.nome,
-        preco_venda: formData.preco_venda ? Number(formData.preco_venda) : null,
-        custo: formData.custo ? Number(formData.custo) : null,
-        estoque: formData.estoque ? Number(formData.estoque) : 0,
-        codigo_barras: formData.codigo_barras || null,
+        nome: formData.nome.trim(),
+        preco_venda: parseDecimal(formData.preco_venda),
+        custo: parseDecimal(formData.custo),
+        estoque: parseInteger(formData.estoque) ?? 0,
+        estoque_minimo: parseInteger(formData.estoque_minimo),
+        unidade: formData.unidade.trim() || null,
+        marca: formData.marca.trim() || null,
+        localizacao: formData.localizacao.trim() || null,
+        data_validade: formData.data_validade || null,
+        codigo_barras: formData.codigo_barras.trim() || null,
         categoria_id: formData.categoria_id || null,
-        fornecedor_id: formData.fornecedor_id || null
+        fornecedor_id: formData.fornecedor_id || null,
+        fornecedor: formData.fornecedor_texto.trim() || null,
+        ativo: Boolean(formData.ativo),
       }
 
       await api.post('/produtos', payload, {
@@ -122,6 +155,8 @@ export default function NovoProduto() {
         texto: 'Produto cadastrado com sucesso! Redirecionando...',
         tipo: 'sucesso'
       })
+
+      setFormData(INITIAL_FORM)
 
       setTimeout(() => navigate('/produtos'), 1500)
     } catch (err) {
@@ -173,9 +208,7 @@ export default function NovoProduto() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {/* Nome */}
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nome do Produto*
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Produto*</label>
               <div className="relative">
                 <input
                   type="text"
@@ -190,11 +223,8 @@ export default function NovoProduto() {
               </div>
             </div>
 
-            {/* Preço de Venda */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Preço de Venda*
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Preço de Venda*</label>
               <div className="relative">
                 <input
                   type="number"
@@ -211,11 +241,8 @@ export default function NovoProduto() {
               </div>
             </div>
 
-            {/* Custo */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Custo*
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Custo*</label>
               <div className="relative">
                 <input
                   type="number"
@@ -232,11 +259,8 @@ export default function NovoProduto() {
               </div>
             </div>
 
-            {/* Estoque */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Estoque*
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Estoque*</label>
               <div className="relative">
                 <input
                   type="number"
@@ -245,18 +269,75 @@ export default function NovoProduto() {
                   value={formData.estoque}
                   onChange={handleChange}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Quantidade"
+                  placeholder="Quantidade atual"
                   required
                 />
                 <FiBox className="absolute left-3 top-3 text-gray-400" />
               </div>
             </div>
 
-            {/* Categoria existente */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoria*
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Estoque mínimo</label>
+              <input
+                type="number"
+                name="estoque_minimo"
+                min="0"
+                value={formData.estoque_minimo}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Opcional"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Unidade</label>
+              <input
+                type="text"
+                name="unidade"
+                value={formData.unidade}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Ex: un, cx, kg"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
+              <input
+                type="text"
+                name="marca"
+                value={formData.marca}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Opcional"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Localização</label>
+              <input
+                type="text"
+                name="localizacao"
+                value={formData.localizacao}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Ex: Corredor A - Prateleira 3"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Data de validade</label>
+              <input
+                type="date"
+                name="data_validade"
+                value={formData.data_validade}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria*</label>
               <div className="relative">
                 <select
                   name="categoria_id"
@@ -276,7 +357,6 @@ export default function NovoProduto() {
               </div>
             </div>
 
-            {/* Nova Categoria */}
             <div className="col-span-2 flex gap-2 items-end">
               <input
                 type="text"
@@ -295,11 +375,8 @@ export default function NovoProduto() {
               </button>
             </div>
 
-            {/* Fornecedor */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fornecedor*
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fornecedor*</label>
               <div className="relative">
                 <select
                   name="fornecedor_id"
@@ -319,11 +396,20 @@ export default function NovoProduto() {
               </div>
             </div>
 
-            {/* Código de Barras */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Código de Barras
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome externo do fornecedor</label>
+              <input
+                type="text"
+                name="fornecedor_texto"
+                value={formData.fornecedor_texto}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Opcional (exibição no catálogo)"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Código de barras</label>
               <input
                 type="text"
                 name="codigo_barras"
@@ -333,9 +419,18 @@ export default function NovoProduto() {
                 placeholder="Opcional"
               />
             </div>
-          </div>
 
-          {/* Botões */}
+            <div className="col-span-2 flex items-center gap-2">
+              <input
+                id="produto-ativo"
+                type="checkbox"
+                checked={formData.ativo}
+                onChange={handleAtivoChange}
+                className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+              />
+              <label htmlFor="produto-ativo" className="text-sm text-gray-700">Produto ativo</label>
+            </div>
+          </div>          {/* Botões */}
           <div className="flex justify-end gap-3">
             <button
               type="button"

@@ -3,7 +3,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends, Response, Query
-from sqlalchemy import text, or_, func
+from sqlalchemy import text, or_, func, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -99,7 +99,7 @@ def criar_produto(produto: ProdutoCreate, db: Session = Depends(get_db)) -> Prod
 @router.get("/produtos", response_model=List[ProdutoOut])
 def listar_produtos(
     response: Response,
-    # paginação: prioriza page/per_page; aceita limit/offset
+    # paginacao: prioriza page/per_page; aceita limit/offset
     page: Optional[int] = Query(default=None, ge=1),
     per_page: Optional[int] = Query(default=None, ge=1, le=200),
     limit: Optional[int] = Query(default=None, ge=1, le=200),
@@ -109,12 +109,17 @@ def listar_produtos(
     search: Optional[str] = None,
     term: Optional[str] = None,
     nome: Optional[str] = None,
+    categoria_id: Optional[UUID] = Query(default=None),
+    estoque_status: Optional[str] = Query(default=None),
+    preco_min: Optional[float] = Query(default=None, ge=0),
+    preco_max: Optional[float] = Query(default=None, ge=0),
+    ativo: Optional[bool] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> List[Produto]:
     """
-    Lista produtos com paginação e busca server-side.
+    Lista produtos com paginacao e busca server-side.
 
-    Cabeçalhos devolvidos:
+    Cabecalhos devolvidos:
       - X-Total-Count: total de itens da busca no banco
       - Content-Range: items <start>-<end>/<total>
     """
@@ -134,6 +139,33 @@ def listar_produtos(
                 Produto.codigo_produto.ilike(like),
             )
         )
+
+    if categoria_id:
+        base_query = base_query.filter(Produto.categoria_id == categoria_id)
+
+    if ativo is not None:
+        base_query = base_query.filter(Produto.ativo.is_(ativo))
+
+    if preco_min is not None:
+        base_query = base_query.filter(Produto.preco_venda >= preco_min)
+
+    if preco_max is not None:
+        base_query = base_query.filter(Produto.preco_venda <= preco_max)
+
+    if estoque_status:
+        status = estoque_status.lower().strip()
+        if status in {"sem", "zerado", "sem_estoque"}:
+            base_query = base_query.filter(or_(Produto.estoque <= 0, Produto.estoque.is_(None)))
+        elif status in {"baixo", "baixo_estoque"}:
+            base_query = base_query.filter(
+                and_(
+                    Produto.estoque.isnot(None),
+                    Produto.estoque > 0,
+                    Produto.estoque < 10,
+                )
+            )
+        elif status in {"disponivel", "positivo", "em_estoque"}:
+            base_query = base_query.filter(Produto.estoque >= 10)
 
     total = base_query.with_entities(func.count(Produto.id)).scalar() or 0
 

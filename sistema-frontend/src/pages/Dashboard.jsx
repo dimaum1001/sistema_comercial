@@ -114,6 +114,7 @@ export default function Dashboard() {
       description: 'Gerencie seu catálogo de produtos',
       icon: <FiPackage size={28} className="text-blue-500" />,
       onView: () => navigate('/produtos'),
+      onAdd: () => navigate('/produtos/novo'),
       enabled: true,
     },
     {
@@ -122,6 +123,7 @@ export default function Dashboard() {
       description: 'Gerencie sua base de clientes',
       icon: <FiUsers size={28} className="text-purple-500" />,
       onView: () => navigate('/clientes'),
+      onAdd: () => navigate('/clientes/novo'),
       enabled: true,
     },
     {
@@ -130,14 +132,16 @@ export default function Dashboard() {
       description: 'Registre e acompanhe suas vendas',
       icon: <FiShoppingCart size={28} className="text-green-500" />,
       onView: () => navigate('/vendas'),
+      onAdd: () => navigate('/vendas?nova=1'),
       enabled: true,
     },
     {
       key: 'movimentos',
       title: 'Movimentos',
       description: 'Entradas, saídas e ajustes de estoque',
-      icon: <FiBox size={28} className="text-orange-500" />, // caixa para movimentos
+      icon: <FiBox size={28} className="text-orange-500" />,
       onView: () => navigate('/movimentos'),
+      onAdd: () => navigate('/movimentos?registrar=1'),
       enabled: true,
     },
     {
@@ -146,10 +150,9 @@ export default function Dashboard() {
       description: 'Cadastro e gestão de fornecedores',
       icon: <FiTruck size={28} className="text-indigo-500" />,
       onView: () => navigate('/fornecedores'),
+      onAdd: () => navigate('/fornecedores/cadastrar'),
       enabled: true,
     },
-    // Exemplo de botão desativado: basta deixar enabled: false
-    // { key:'financeiro', title:'Financeiro', ... enabled:false }
   ].filter((f) => f.enabled);
 
   return (
@@ -229,14 +232,14 @@ export default function Dashboard() {
             <FiPlus /> Nova venda
           </button>
           <button
-            onClick={() => navigate('/produtos?novo=1')}
+            onClick={() => navigate('/produtos/novo')}
             className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
             title="Novo Produto"
           >
             <FiPlus /> Novo produto
           </button>
           <button
-            onClick={() => navigate('/clientes?novo=1')}
+            onClick={() => navigate('/clientes/novo')}
             className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg bg-purple-600 text-white hover:bg-purple-700"
             title="Novo Cliente"
           >
@@ -263,6 +266,7 @@ export default function Dashboard() {
               description={f.description}
               icon={f.icon}
               onView={f.onView}
+              onAdd={f.onAdd}
             />
           ))}
         </div>
