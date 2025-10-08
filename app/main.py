@@ -5,11 +5,14 @@ from app.models import models  # Isso garante que os models sejam importados
 from fastapi import FastAPI
 from app.auth import auth_routes
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import categorias_routes, clientes_routes, produtos_routes, vendas_routes, movimentos_routes, endereco_routes, dashboard_routes, fornecedores_routes, usuarios_routes, precos_routes, pagamentos_routes, contas_pagar_routes, relatorios_routes
+from app.routes import categorias_routes, clientes_routes, produtos_routes, vendas_routes, movimentos_routes, endereco_routes, dashboard_routes, fornecedores_routes, usuarios_routes, precos_routes, pagamentos_routes, contas_pagar_routes, relatorios_routes, auditoria_routes
+from app.middleware.audit import AuditMiddleware
+from app.core.config import settings  # onde você lê SECRET_KEY do .env
 
 
 app = FastAPI()
 
+app.add_middleware(AuditMiddleware, salt=settings.SECRET_KEY)
 
 origins = [
     "http://localhost:5173",  # frontend
@@ -40,6 +43,7 @@ app.include_router(precos_routes.router)
 app.include_router(pagamentos_routes.router)
 app.include_router(relatorios_routes.router)
 app.include_router(contas_pagar_routes.router)
+app.include_router(auditoria_routes.router)
 
 
 

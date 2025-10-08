@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
-
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from app.db.database import Base
 
 
@@ -281,3 +281,16 @@ class ContaPagar(Base):
     data_pagamento = Column(DateTime, nullable=True)
 
     fornecedor = relationship("Fornecedor", back_populates="contas_pagar")
+
+# --- LOG DE ACESSO (LGPD) ---
+class AcessoLog(Base):
+    __tablename__ = "acessos_log"
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(PGUUID(as_uuid=True), nullable=True)
+    metodo = Column(String(8), nullable=False)
+    rota = Column(String(255), nullable=False)
+    status_code = Column(Integer, nullable=False)
+    ip_hash = Column(String(128), nullable=True)
+    user_agent = Column(String(300), nullable=True)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)    

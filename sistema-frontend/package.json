@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.2",
     "axios": "^1.11.0",
     "jspdf": "^3.0.2",
     "jspdf-autotable": "^5.0.2",

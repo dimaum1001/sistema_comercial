@@ -1,4 +1,4 @@
-// src/pages/layout.jsx
+// src/pages/Layout.jsx
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import api from '../services/api'
@@ -9,12 +9,11 @@ export default function Layout() {
 
   const [usuario, setUsuario] = useState(null)
 
-  // estados das seções colapsáveis (persistidos)
   const [open, setOpen] = useState(() => {
     const saved = localStorage.getItem('menuOpen')
     return saved
       ? JSON.parse(saved)
-      : { cadastros: true, vendas: true, financeiro: false, relatorios: false }
+      : { cadastros: true, vendas: true, financeiro: false, relatorios: false, admin: false }
   })
 
   useEffect(() => {
@@ -33,9 +32,12 @@ export default function Layout() {
           headers: { Authorization: `Bearer ${token}` },
         })
         setUsuario(response.data)
+        // 🔹 garante que RequireAdmin consiga ler sem nova chamada
+        localStorage.setItem('usuario', JSON.stringify(response.data))
       } catch (error) {
         console.error('Erro ao buscar usuário:', error)
         localStorage.removeItem('token')
+        localStorage.removeItem('usuario')
         navigate('/login')
       }
     }
@@ -44,6 +46,7 @@ export default function Layout() {
 
   const sair = () => {
     localStorage.removeItem('token')
+    localStorage.removeItem('usuario')
     navigate('/login')
   }
 
@@ -79,24 +82,20 @@ export default function Layout() {
     </div>
   )
 
-  // --- Correção: ler a aba atual de /relatorios para destacar o item certo ---
   const relatoriosTab = new URLSearchParams(location.search).get('tab') || ''
   const isRelatorioActive = (tabKey) =>
     location.pathname.startsWith('/relatorios') && relatoriosTab === tabKey
-  // -------------------------------------------------------------------------
+
+  const isAdmin = String(usuario?.tipo || '').toLowerCase() === 'admin'
 
   return (
     <div className="min-h-screen flex bg-gray-50">
-      {/* Sidebar fixa com rolagem no conteúdo */}
       <aside className="w-64 fixed left-0 inset-y-0 bg-white shadow-lg flex flex-col h-screen z-40">
-        {/* Cabeçalho */}
         <div className="p-6 border-b border-gray-100 shrink-0">
           <h1 className="text-xl font-bold text-gray-800">Sistema Comercial</h1>
         </div>
 
-        {/* Conteúdo rolável do menu */}
         <nav className="p-4 space-y-2 flex-1 overflow-y-auto pb-6">
-          {/* Usuário logado */}
           <div className="flex items-center p-3 bg-blue-50 rounded-lg mb-6">
             <div className="bg-blue-100 p-2 rounded-full mr-3">
               <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -109,7 +108,6 @@ export default function Layout() {
             </span>
           </div>
 
-          {/* Atalho principal */}
           <button
             type="button"
             onClick={() => navigate('/dashboard')}
@@ -118,21 +116,18 @@ export default function Layout() {
             📊 Dashboard
           </button>
 
-          {/* CADASTROS */}
           <Section id="cadastros" title="Cadastros" icon="🗂️">
             <button type="button" onClick={() => navigate('/produtos')} className={subItemCls(isActive('/produtos'))}>📦 Produtos</button>
             <button type="button" onClick={() => navigate('/clientes')} className={subItemCls(isActive('/clientes'))}>👥 Clientes</button>
             <button type="button" onClick={() => navigate('/fornecedores')} className={subItemCls(isActive('/fornecedores'))}>🏢 Fornecedores</button>
           </Section>
 
-          {/* VENDAS / ESTOQUE */}
           <Section id="vendas" title="Vendas & Estoque" icon="🛒">
             <button type="button" onClick={() => navigate('/vendas')} className={subItemCls(isActive('/vendas'))}>💰 Vendas</button>
             <button type="button" onClick={() => navigate('/movimentos')} className={subItemCls(isActive('/movimentos'))}>🔄 Mov. de Estoque</button>
             <button type="button" onClick={() => navigate('/produtos/precos')} className={subItemCls(isActive('/produtos/precos'))}>💲 Tabela de Preços</button>
           </Section>
 
-          {/* FINANCEIRO */}
           <Section id="financeiro" title="Financeiro" icon="💼">
             <button
               type="button"
@@ -150,7 +145,6 @@ export default function Layout() {
             </button>
           </Section>
 
-          {/* RELATÓRIOS */}
           <Section id="relatorios" title="Relatórios" icon="📈">
             <button
               type="button"
@@ -182,18 +176,25 @@ export default function Layout() {
             </button>
           </Section>
 
-          {/* Apenas Admin */}
-          {usuario?.tipo === 'admin' && (
-            <button
-              type="button"
-              onClick={() => navigate('/usuarios')}
-              className={itemCls(isActive('/usuarios'))}
-            >
-              👤 Usuários
-            </button>
+          {isAdmin && (
+            <Section id="admin" title="Admin" icon="🛡️">
+              <button
+                type="button"
+                onClick={() => navigate('/usuarios')}
+                className={subItemCls(isActive('/usuarios'))}
+              >
+                👤 Usuários
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/auditoria')}
+                className={subItemCls(isActive('/admin/auditoria'))}
+              >
+                📜 Auditoria (Logs)
+              </button>
+            </Section>
           )}
 
-          {/* Sair (dentro da lista, como último item) */}
           <div className="pt-3 mt-3 border-t border-gray-100">
             <button
               type="button"
@@ -206,7 +207,6 @@ export default function Layout() {
         </nav>
       </aside>
 
-      {/* Conteúdo principal */}
       <main className="flex-1 md:ml-64 p-6">
         <Outlet />
       </main>

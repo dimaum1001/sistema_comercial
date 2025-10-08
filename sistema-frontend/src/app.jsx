@@ -22,6 +22,8 @@ import ContasReceber from './pages/ContasReceber'
 import ContasPagar from './pages/ContasPagar'
 import Relatorios from './pages/Relatorios'
 import ProdutoEditar from './pages/ProdutoEditar'
+import RequireAdmin from './components/RequireAdmin' 
+import Auditoria from './pages/Auditoria'
 
 // --------- Controle reativo de autenticação ----------
 function Private({ children }) {
@@ -101,6 +103,17 @@ export default function App() {
         {/* Relatórios */}
         <Route path="/relatorios" element={<Relatorios />} />
       </Route>
+      {/* Rota protegida apenas para admins */}
+      <Route
+        path="/admin/auditoria"
+        element={
+          <Private>
+            <RequireAdmin>
+              <Auditoria />
+            </RequireAdmin>
+          </Private>
+        }
+      />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
