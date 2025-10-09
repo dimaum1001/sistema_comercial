@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import {
@@ -10,6 +10,7 @@ import {
   FiTag,
   FiPlus,
   FiTruck,
+  FiX,
 } from 'react-icons/fi'
 
 const INITIAL_FORM = {
@@ -33,11 +34,16 @@ export default function NovoProduto() {
   const navigate = useNavigate()
   const [formData, setFormData] = useState(INITIAL_FORM)
   const [categorias, setCategorias] = useState([])
-  const [fornecedores, setFornecedores] = useState([])
   const [novaCategoria, setNovaCategoria] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingCategoria, setLoadingCategoria] = useState(false)
   const [mensagem, setMensagem] = useState({ texto: '', tipo: '' })
+  const [fornecedorTerm, setFornecedorTerm] = useState('')
+  const [fornecedorResultados, setFornecedorResultados] = useState([])
+  const [fornecedorLoading, setFornecedorLoading] = useState(false)
+  const [fornecedorAberto, setFornecedorAberto] = useState(false)
+  const [fornecedorSelecionado, setFornecedorSelecionado] = useState(null)
+  const fornecedorBoxRef = useRef(null)
 
   // Carregar categorias
   useEffect(() => {
@@ -56,22 +62,70 @@ export default function NovoProduto() {
     fetchCategorias()
   }, [])
 
-  // Carregar fornecedores
   useEffect(() => {
-    const fetchFornecedores = async () => {
-      try {
-        const token = localStorage.getItem('token')
-        const response = await api.get('/fornecedores', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        setFornecedores(response.data)
-      } catch (err) {
-        console.error('Erro ao carregar fornecedores:', err)
-        setMensagem({ texto: 'Erro ao carregar fornecedores', tipo: 'erro' })
+    const handleClickOutside = (event) => {
+      if (fornecedorBoxRef.current && !fornecedorBoxRef.current.contains(event.target)) {
+        setFornecedorAberto(false)
       }
     }
-    fetchFornecedores()
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
   }, [])
+
+  useEffect(() => {
+    const term = fornecedorTerm.trim()
+
+    if (fornecedorSelecionado && term === (fornecedorSelecionado.nome || '')) {
+      setFornecedorResultados([])
+      setFornecedorAberto(false)
+      setFornecedorLoading(false)
+      return
+    }
+
+    if (term.length < 2) {
+      setFornecedorResultados([])
+      setFornecedorAberto(false)
+      setFornecedorLoading(false)
+      return
+    }
+
+    let cancelado = false
+    setFornecedorLoading(true)
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await api.get('/fornecedores', {
+          params: { q: term, page: 1, per_page: 10 },
+        })
+
+        if (cancelado) {
+          return
+        }
+
+        const lista = Array.isArray(response.data) ? response.data : response.data?.items || []
+        setFornecedorResultados(lista)
+        setFornecedorAberto(true)
+      } catch (err) {
+        if (!cancelado) {
+          console.error('Erro ao buscar fornecedores:', err)
+          setFornecedorResultados([])
+          setFornecedorAberto(false)
+        }
+      } finally {
+        if (!cancelado) {
+          setFornecedorLoading(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      cancelado = true
+      clearTimeout(timer)
+    }
+  }, [fornecedorTerm, fornecedorSelecionado])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -157,6 +211,10 @@ export default function NovoProduto() {
       })
 
       setFormData(INITIAL_FORM)
+      setFornecedorTerm('')
+      setFornecedorSelecionado(null)
+      setFornecedorResultados([])
+      setFornecedorAberto(false)
 
       setTimeout(() => navigate('/produtos'), 1500)
     } catch (err) {
@@ -377,22 +435,101 @@ export default function NovoProduto() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Fornecedor*</label>
-              <div className="relative">
-                <select
-                  name="fornecedor_id"
-                  value={formData.fornecedor_id}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Selecione...</option>
-                  {fornecedores.map(f => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome}
-                    </option>
-                  ))}
-                </select>
-                <FiTruck className="absolute left-3 top-3 text-gray-400" />
+              <div className="relative" ref={fornecedorBoxRef}>
+                <FiTruck className="absolute left-3 top-3 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={fornecedorTerm}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setFornecedorTerm(value)
+                    setFornecedorSelecionado(null)
+                    setFormData((prev) => ({ ...prev, fornecedor_id: '' }))
+                  }}
+                  onFocus={() => {
+                    if (fornecedorResultados.length > 0) {
+                      setFornecedorAberto(true)
+                    }
+                  }}
+                  placeholder="Digite 2+ letras para buscar..."
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  autoComplete="off"
+                />
+                {fornecedorTerm && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFornecedorTerm('')
+                      setFornecedorSelecionado(null)
+                      setFornecedorResultados([])
+                      setFornecedorAberto(false)
+                      setFormData((prev) => ({ ...prev, fornecedor_id: '' }))
+                    }}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                    aria-label="Limpar fornecedor"
+                  >
+                    <FiX />
+                  </button>
+                )}
+                {fornecedorLoading && (
+                  <svg
+                    className="animate-spin h-4 w-4 text-blue-500 absolute right-3 top-3"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                )}
+                <input type="hidden" name="fornecedor_id" value={formData.fornecedor_id} required />
+                {fornecedorAberto && (
+                  <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                    {fornecedorResultados.length === 0 && !fornecedorLoading ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        Nenhum fornecedor encontrado
+                      </div>
+                    ) : (
+                      fornecedorResultados.map((fornecedor) => {
+                        const nome = fornecedor.nome || fornecedor.razao_social || ''
+                        return (
+                          <button
+                            type="button"
+                            key={fornecedor.id}
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              setFornecedorSelecionado(fornecedor)
+                              setFornecedorTerm(nome)
+                              setFormData((prev) => ({ ...prev, fornecedor_id: fornecedor.id }))
+                              setFornecedorAberto(false)
+                              setFornecedorResultados([])
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 focus:bg-blue-50"
+                          >
+                            <div className="font-medium text-gray-700">{nome}</div>
+                            {(fornecedor.codigo_fornecedor || fornecedor.cnpj_cpf) && (
+                              <div className="text-xs text-gray-500">
+                                {fornecedor.codigo_fornecedor ? `${fornecedor.codigo_fornecedor} ` : ''}
+                                {fornecedor.cnpj_cpf}
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

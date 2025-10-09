@@ -38,6 +38,28 @@ function formatarTelefone(valor) {
   return valor
 }
 
+const TOTAL_HEADER_KEYS = ['x-total-count', 'x-total', 'x-count', 'x-total-items', 'x-items-count']
+
+function parseTotalFromHeaders(headers = {}) {
+  for (const key of TOTAL_HEADER_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(headers, key)) {
+      const value = headers[key]
+      const numero = Number(value)
+      if (!Number.isNaN(numero)) {
+        return numero
+      }
+    }
+  }
+  const contentRange = headers['content-range']
+  if (typeof contentRange === 'string' && contentRange.includes('/')) {
+    const total = Number(contentRange.split('/').pop())
+    if (!Number.isNaN(total)) {
+      return total
+    }
+  }
+  return null
+}
+
 export default function Fornecedores() {
   const [fornecedores, setFornecedores] = useState([])
   const [loading, setLoading] = useState(true)
@@ -51,6 +73,30 @@ export default function Fornecedores() {
 
   const navigate = useNavigate()
 
+  const fetchTotalFallback = useCallback(async (query) => {
+    try {
+      const termo = (query || '').trim()
+      const params = termo
+        ? { q: termo, search: termo, term: termo, nome: termo }
+        : {}
+      const response = await api.get('/fornecedores/count', { params })
+      const data = response?.data
+      const total =
+        typeof data === 'number'
+          ? data
+          : typeof data?.total === 'number'
+          ? data.total
+          : typeof data?.count === 'number'
+          ? data.count
+          : null
+      if (total != null) {
+        setTotalCount(total)
+      }
+    } catch (error) {
+      console.error('Erro ao obter total de fornecedores (fallback):', error)
+      setTotalCount(null)
+    }
+  }, [])
   const fetchFornecedores = useCallback(async () => {
     const token = localStorage.getItem('token')
 
@@ -76,57 +122,34 @@ export default function Fornecedores() {
         },
       })
 
-      const data = Array.isArray(response.data) ? response.data : []
-      if (data.length > pageSize) {
+      const lista = Array.isArray(response.data) ? response.data : response.data?.items || []
+      if (lista.length > pageSize) {
         setHasMore(true)
-        setFornecedores(data.slice(0, pageSize))
+        setFornecedores(lista.slice(0, pageSize))
       } else {
         setHasMore(false)
-        setFornecedores(data)
+        setFornecedores(lista)
+      }
+
+      const totalFromHeaders = parseTotalFromHeaders(response.headers || {})
+      if (totalFromHeaders != null) {
+        setTotalCount(totalFromHeaders)
+      } else {
+        await fetchTotalFallback(debouncedSearch)
       }
     } catch (err) {
       console.error('Erro ao buscar fornecedores:', err)
       setHasMore(false)
       setFornecedores([])
+      setTotalCount(null)
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, navigate, page, pageSize])
-
-  const fetchTotal = useCallback(async () => {
-    const token = localStorage.getItem('token')
-    if (!token) return
-
-    try {
-      const chunk = 1000
-      let offset = 0
-      let total = 0
-
-      for (let guard = 0; guard < 200; guard += 1) {
-        const resp = await api.get('/fornecedores', {
-          headers: { Authorization: `Bearer ${token}` },
-          params: { offset, limit: chunk },
-        })
-        const arr = Array.isArray(resp.data) ? resp.data : []
-        total += arr.length
-        if (arr.length < chunk) break
-        offset += chunk
-      }
-
-      setTotalCount(total)
-    } catch (error) {
-      console.error('Erro ao obter total de fornecedores:', error)
-      setTotalCount(null)
-    }
-  }, [])
+  }, [debouncedSearch, fetchTotalFallback, navigate, page, pageSize])
 
   useEffect(() => {
     fetchFornecedores()
   }, [fetchFornecedores])
-
-  useEffect(() => {
-    fetchTotal()
-  }, [fetchTotal])
 
   const filteredFornecedores = fornecedores.filter((fornecedor) => {
     const termo = searchTerm.toLowerCase()
@@ -145,7 +168,6 @@ export default function Fornecedores() {
           headers: { Authorization: `Bearer ${token}` },
         })
         fetchFornecedores()
-        fetchTotal()
       } catch (err) {
         console.error('Erro ao excluir fornecedor:', err)
       }
