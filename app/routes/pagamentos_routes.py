@@ -1,8 +1,8 @@
-"""
+﻿"""
 Rotas para gerenciamento de pagamentos das vendas.
 
-Inclui criação, listagem (com paginação), listagem de pendentes, atualização
-e exclusão de pagamentos. Ao marcar um pagamento como pago, se nenhuma data
+Inclui criaÃ§Ã£o, listagem (com paginaÃ§Ã£o), listagem de pendentes, atualizaÃ§Ã£o
+e exclusÃ£o de pagamentos. Ao marcar um pagamento como pago, se nenhuma data
 for fornecida, define a data de pagamento como o momento atual.
 """
 
@@ -13,11 +13,12 @@ from uuid import UUID
 from datetime import datetime
 
 from app.db.database import get_db
+from app.auth.deps import get_current_user
 from app.models.models import Pagamento
 from app.schemas.pagamento_schema import PagamentoCreate, PagamentoUpdate, PagamentoOut
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.post("/pagamentos", response_model=PagamentoOut)
@@ -41,7 +42,7 @@ def criar_pagamento(payload: PagamentoCreate, db: Session = Depends(get_db)) -> 
 
 @router.get("/pagamentos", response_model=List[PagamentoOut])
 def listar_pagamentos(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)) -> List[Pagamento]:
-    """Lista todos os pagamentos ordenados por vencimento com paginação."""
+    """Lista todos os pagamentos ordenados por vencimento com paginaÃ§Ã£o."""
     return (
         db.query(Pagamento)
         .order_by(Pagamento.data_vencimento.asc().nullslast())
@@ -53,7 +54,7 @@ def listar_pagamentos(skip: int = 0, limit: int = 100, db: Session = Depends(get
 
 @router.get("/pagamentos/pendentes", response_model=List[PagamentoOut])
 def listar_pendentes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)) -> List[Pagamento]:
-    """Lista apenas os pagamentos ainda pendentes com paginação."""
+    """Lista apenas os pagamentos ainda pendentes com paginaÃ§Ã£o."""
     return (
         db.query(Pagamento)
         .filter(Pagamento.status == "pendente")
@@ -69,9 +70,9 @@ def atualizar_pagamento(pagamento_id: UUID, payload: PagamentoUpdate, db: Sessio
     """Atualiza campos de um pagamento existente; define data_pagamento quando status=\"pago\"."""
     pagamento = db.query(Pagamento).filter(Pagamento.id == pagamento_id).first()
     if not pagamento:
-        raise HTTPException(status_code=404, detail="Pagamento não encontrado")
+        raise HTTPException(status_code=404, detail="Pagamento nÃ£o encontrado")
     dados = payload.dict(exclude_unset=True)
-    # Se marcar como pago e não tiver data_pagamento, define agora
+    # Se marcar como pago e nÃ£o tiver data_pagamento, define agora
     if dados.get("status") == "pago" and not dados.get("data_pagamento"):
         dados["data_pagamento"] = datetime.utcnow()
     for key, value in dados.items():
@@ -86,7 +87,7 @@ def excluir_pagamento(pagamento_id: UUID, db: Session = Depends(get_db)):
     """Exclui um pagamento pelo seu identificador."""
     pagamento = db.query(Pagamento).filter(Pagamento.id == pagamento_id).first()
     if not pagamento:
-        raise HTTPException(status_code=404, detail="Pagamento não encontrado")
+        raise HTTPException(status_code=404, detail="Pagamento nÃ£o encontrado")
     db.delete(pagamento)
     db.commit()
-    return {"detail": "Pagamento excluído com sucesso"}
+    return {"detail": "Pagamento excluÃ­do com sucesso"}

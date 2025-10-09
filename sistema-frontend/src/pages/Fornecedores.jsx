@@ -16,7 +16,9 @@ function useDebounced(value, delay = 300) {
 
 function formatarCnpjCpf(valor) {
   if (!valor) return 'Nao informado'
-  const digits = String(valor).replace(/[^0-9]/g, '')
+  const str = String(valor)
+  if (str.includes('*')) return str
+  const digits = str.replace(/[^0-9]/g, '')
   if (digits.length === 11) {
     return `***.***.***-${digits.slice(-2)}`
   }
@@ -32,7 +34,9 @@ function formatarCnpjCpf(valor) {
 
 function formatarTelefone(valor) {
   if (!valor) return 'Nao informado'
-  const n = String(valor).replace(/\D/g, '')
+  const str = String(valor)
+  if (str.includes('*')) return str
+  const n = str.replace(/\D/g, '')
   if (n.length === 10) return n.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
   if (n.length === 11) return n.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
   return valor

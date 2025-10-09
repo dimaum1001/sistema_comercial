@@ -1,10 +1,10 @@
-"""
+﻿"""
 Rotas para gerenciamento de clientes.
 
-- Paginação server-side (aceita page/per_page OU limit/offset/skip)
-- Máx 200 por página quando usar per_page (UI), mas limit pode ser maior (até 5000) para varreduras
+- PaginaÃ§Ã£o server-side (aceita page/per_page OU limit/offset/skip)
+- MÃ¡x 200 por pÃ¡gina quando usar per_page (UI), mas limit pode ser maior (atÃ© 5000) para varreduras
 - Busca server-side (q | search | term | nome) + filtros cpf_cnpj, email, telefone, codigo_cliente
-- Retorna total via cabeçalhos X-Total-Count e Content-Range (0-based, inclusivo)
+- Retorna total via cabeÃ§alhos X-Total-Count e Content-Range (0-based, inclusivo)
 - Endpoints /clientes/count e /clientes/total como fallback
 """
 
@@ -17,15 +17,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.database import get_db
+from app.auth.deps import get_current_user
 from app.models.models import Cliente, Endereco
 from app.schemas.cliente_schema import ClienteCreate, ClienteOut, ClienteUpdate
+from app.utils.privacy import mask_cpf_cnpj, mask_phone
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 # ------------------------ utils ------------------------ #
 def gerar_proximo_codigo_cliente(db: Session, largura: int = 6) -> str:
-    """Gera um código sequencial numérico para clientes (zero-padding)."""
+    """Gera um cÃ³digo sequencial numÃ©rico para clientes (zero-padding)."""
     sql = text(
         """
         SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(codigo_cliente, '\\D', '', 'g') AS INTEGER)), 0)
@@ -47,10 +49,10 @@ def _normaliza_paginacao(
 ) -> tuple[int, int]:
     """
     Regras:
-      - Se 'skip' OU 'limit' vierem, priorizamos esse par (compatível com o front atual).
-      - Caso contrário, usamos page/per_page (com teto de 200).
+      - Se 'skip' OU 'limit' vierem, priorizamos esse par (compatÃ­vel com o front atual).
+      - Caso contrÃ¡rio, usamos page/per_page (com teto de 200).
       - Fallback: limit default 200, offset 0.
-      - Para varreduras (ex.: total), permitimos limit grande (até MAX_LIMIT) quando 'limit' for usado.
+      - Para varreduras (ex.: total), permitimos limit grande (atÃ© MAX_LIMIT) quando 'limit' for usado.
     """
     MAX_PER_PAGE = 200
     MAX_LIMIT = 5000  # permite varreduras grandes (ex.: 1000) sem travar
@@ -68,7 +70,7 @@ def _normaliza_paginacao(
         pp = max(1, min(int(per_page or MAX_PER_PAGE), MAX_PER_PAGE))
         return (pp * (p - 1), pp)
 
-    # Por fim, offset/limit genéricos
+    # Por fim, offset/limit genÃ©ricos
     off = max(0, int(offset or 0))
     lim = int(limit or MAX_PER_PAGE)
     lim = max(1, min(lim, MAX_PER_PAGE))
@@ -82,15 +84,23 @@ def _termo_busca(q: Optional[str], search: Optional[str], term: Optional[str], n
     return ""
 
 
+def _cliente_to_out(cliente: Cliente) -> ClienteOut:
+    data = ClienteOut.model_validate(cliente)
+    data.cpf_cnpj = mask_cpf_cnpj(data.cpf_cnpj)
+    if data.telefone:
+        data.telefone = mask_phone(data.telefone)
+    return data
+
+
 # ------------------------ rotas ------------------------ #
 @router.post("/clientes", response_model=ClienteOut)
 def criar_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)) -> Cliente:
-    """Cria um novo cliente e seus endereços relacionados."""
+    """Cria um novo cliente e seus endereÃ§os relacionados."""
     # valida duplicidade de CPF/CNPJ
     if cliente.cpf_cnpj and db.query(Cliente).filter(Cliente.cpf_cnpj == cliente.cpf_cnpj).first():
-        raise HTTPException(status_code=400, detail="CPF/CNPJ já cadastrado")
+        raise HTTPException(status_code=400, detail="CPF/CNPJ jÃ¡ cadastrado")
 
-    # Garante código do cliente (NOT NULL/UNIQUE)
+    # Garante cÃ³digo do cliente (NOT NULL/UNIQUE)
     valor = getattr(cliente, "codigo_cliente", None)
     codigo = valor.strip() if isinstance(valor, str) else ""
     if not codigo:
@@ -107,15 +117,15 @@ def criar_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)) -> Clie
     db.add(novo_cliente)
 
     try:
-        db.flush()  # garante ID para endereços
+        db.flush()  # garante ID para endereÃ§os
     except IntegrityError as e:
         db.rollback()
         msg = str(e).lower()
         if "unique" in msg or "duplicate" in msg:
-            raise HTTPException(status_code=409, detail="Registro duplicado (código, CPF/CNPJ ou e-mail).")
+            raise HTTPException(status_code=409, detail="Registro duplicado (cÃ³digo, CPF/CNPJ ou e-mail).")
         raise HTTPException(status_code=400, detail="Erro ao criar cliente.")
 
-    # cria endereços associados (se enviados)
+    # cria endereÃ§os associados (se enviados)
     for end in cliente.enderecos or []:
         novo_endereco = Endereco(
             cliente_id=novo_cliente.id,
@@ -133,25 +143,25 @@ def criar_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)) -> Clie
 
     db.commit()
     db.refresh(novo_cliente)
-    _ = novo_cliente.enderecos  # pré-carrega
-    return novo_cliente
+    _ = novo_cliente.enderecos  # prÃ©-carrega
+    return _cliente_to_out(novo_cliente)
 
 
 @router.get("/clientes", response_model=List[ClienteOut])
 def listar_clientes(
     response: Response,
-    # paginação (suporta ambos os estilos)
+    # paginaÃ§Ã£o (suporta ambos os estilos)
     page: Optional[int] = Query(default=None, ge=1),
     per_page: Optional[int] = Query(default=None, ge=1, le=200),
     limit: Optional[int] = Query(default=None, ge=1),
     offset: Optional[int] = Query(default=None, ge=0),
-    skip: Optional[int] = Query(default=None, ge=0),  # <--- compatível com seu front atual
-    # busca genérica
+    skip: Optional[int] = Query(default=None, ge=0),  # <--- compatÃ­vel com seu front atual
+    # busca genÃ©rica
     q: Optional[str] = None,
     search: Optional[str] = None,
     term: Optional[str] = None,
     nome: Optional[str] = None,
-    # filtros específicos
+    # filtros especÃ­ficos
     cpf_cnpj: Optional[str] = None,
     email: Optional[str] = None,
     telefone: Optional[str] = None,
@@ -159,9 +169,9 @@ def listar_clientes(
     db: Session = Depends(get_db),
 ) -> List[Cliente]:
     """
-    Lista clientes com paginação e busca server-side.
+    Lista clientes com paginaÃ§Ã£o e busca server-side.
 
-    Cabeçalhos devolvidos:
+    CabeÃ§alhos devolvidos:
       - X-Total-Count: total de itens da busca no banco
       - Content-Range: items <start>-<end>/<total>   (0-based, inclusivo)
     """
@@ -172,7 +182,7 @@ def listar_clientes(
 
     base = db.query(Cliente)
 
-    # busca por vários campos
+    # busca por vÃ¡rios campos
     if termo:
         like = f"%{termo}%"
         base = base.filter(
@@ -197,7 +207,7 @@ def listar_clientes(
 
     total = base.with_entities(func.count(Cliente.id)).scalar() or 0
 
-    # ordenação padrão
+    # ordenaÃ§Ã£o padrÃ£o
     query = (
         base.options(joinedload(Cliente.enderecos))
         .order_by(Cliente.nome.asc(), Cliente.id.asc())
@@ -207,7 +217,7 @@ def listar_clientes(
 
     clientes = query.all()
 
-    # Cabeçalhos (0-based inclusivo)
+    # CabeÃ§alhos (0-based inclusivo)
     if total == 0:
         start = 0
         end = 0
@@ -218,12 +228,12 @@ def listar_clientes(
     response.headers["X-Total-Count"] = str(total)
     response.headers["Content-Range"] = f"items {start}-{end}/{total}"
 
-    return clientes
+    return [_cliente_to_out(c) for c in clientes]
 
 
 @router.get("/clientes/{cliente_id}", response_model=ClienteOut)
 def get_cliente(cliente_id: UUID, db: Session = Depends(get_db)) -> Cliente:
-    """Obtém um cliente pelo seu identificador (com endereços)."""
+    """ObtÃ©m um cliente pelo seu identificador (com endereÃ§os)."""
     cliente = (
         db.query(Cliente)
         .options(joinedload(Cliente.enderecos))
@@ -231,8 +241,8 @@ def get_cliente(cliente_id: UUID, db: Session = Depends(get_db)) -> Cliente:
         .first()
     )
     if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado")
-    return cliente
+        raise HTTPException(status_code=404, detail="Cliente nÃ£o encontrado")
+    return _cliente_to_out(cliente)
 
 
 @router.delete("/clientes/{cliente_id}", status_code=204)
@@ -240,18 +250,18 @@ def delete_cliente(cliente_id: UUID, db: Session = Depends(get_db)):
     """Exclui um cliente."""
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+        raise HTTPException(status_code=404, detail="Cliente nÃ£o encontrado")
     db.delete(cliente)
     db.commit()
-    return {"message": "Cliente excluído com sucesso"}
+    return {"message": "Cliente excluÃ­do com sucesso"}
 
 
 @router.put("/clientes/{cliente_id}", response_model=ClienteOut)
 def atualizar_cliente(cliente_id: UUID, cliente_update: ClienteUpdate, db: Session = Depends(get_db)) -> Cliente:
-    """Atualiza parcialmente um cliente existente, incluindo endereços."""
+    """Atualiza parcialmente um cliente existente, incluindo endereÃ§os."""
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+        raise HTTPException(status_code=404, detail="Cliente nÃ£o encontrado")
 
     # Validar duplicidade de CPF/CNPJ se o valor for alterado
     if cliente_update.cpf_cnpj:
@@ -261,15 +271,15 @@ def atualizar_cliente(cliente_id: UUID, cliente_update: ClienteUpdate, db: Sessi
             .first()
         )
         if existe:
-            raise HTTPException(status_code=409, detail="CPF/CNPJ já cadastrado em outro cliente.")
+            raise HTTPException(status_code=409, detail="CPF/CNPJ jÃ¡ cadastrado em outro cliente.")
 
-    # Não permitir esvaziar codigo_cliente (NOT NULL)
+    # NÃ£o permitir esvaziar codigo_cliente (NOT NULL)
     if cliente_update.codigo_cliente is not None:
         val = (cliente_update.codigo_cliente or "").strip()
         if val:
             cliente.codigo_cliente = val
 
-    # aplica campos básicos
+    # aplica campos bÃ¡sicos
     if cliente_update.nome is not None:
         cliente.nome = cliente_update.nome
     if cliente_update.tipo_pessoa is not None:
@@ -281,7 +291,7 @@ def atualizar_cliente(cliente_id: UUID, cliente_update: ClienteUpdate, db: Sessi
     if cliente_update.email is not None:
         cliente.email = cliente_update.email
 
-    # Atualiza endereços se enviados (lista vazia remove todos)
+    # Atualiza endereÃ§os se enviados (lista vazia remove todos)
     if cliente_update.enderecos is not None:
         db.query(Endereco).filter(Endereco.cliente_id == cliente.id).delete()
         for end in cliente_update.enderecos:
@@ -305,12 +315,12 @@ def atualizar_cliente(cliente_id: UUID, cliente_update: ClienteUpdate, db: Sessi
         db.rollback()
         msg = str(e).lower()
         if "unique" in msg or "duplicate" in msg:
-            raise HTTPException(status_code=409, detail="Conflito de unicidade (código, CPF/CNPJ ou e-mail).")
+            raise HTTPException(status_code=409, detail="Conflito de unicidade (cÃ³digo, CPF/CNPJ ou e-mail).")
         raise HTTPException(status_code=400, detail="Erro ao atualizar cliente.")
 
     db.refresh(cliente)
     _ = cliente.enderecos
-    return cliente
+    return _cliente_to_out(cliente)
 
 
 # -------------------- endpoints auxiliares de total -------------------- #
@@ -376,3 +386,4 @@ def total_clientes_total(
         codigo_cliente=codigo_cliente,
         db=db,
     )
+

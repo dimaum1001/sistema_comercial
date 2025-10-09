@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.database import SessionLocal
+from app.auth.deps import get_current_user
 from app.models.models import Endereco, Cliente
 from app.schemas.endereco_schema import EnderecoCreate, EnderecoOut
 
-router = APIRouter(prefix="/enderecos", tags=["Endereços"])
+router = APIRouter(prefix="/enderecos", tags=["EndereÃ§os"], dependencies=[Depends(get_current_user)])
 
 
-# Dependência de sessão
+# DependÃªncia de sessÃ£o
 def get_db():
     db = SessionLocal()
     try:
@@ -20,7 +21,7 @@ def get_db():
 def criar_endereco(endereco: EnderecoCreate, db: Session = Depends(get_db)):
     cliente = db.query(Cliente).filter(Cliente.id == endereco.cliente_id).first()
     if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+        raise HTTPException(status_code=404, detail="Cliente nÃ£o encontrado")
 
     novo_endereco = Endereco(**endereco.dict())
     db.add(novo_endereco)
@@ -39,8 +40,9 @@ def listar_enderecos(cliente_id: str, db: Session = Depends(get_db)):
 def deletar_endereco(endereco_id: str, db: Session = Depends(get_db)):
     endereco = db.query(Endereco).filter(Endereco.id == endereco_id).first()
     if not endereco:
-        raise HTTPException(status_code=404, detail="Endereço não encontrado")
+        raise HTTPException(status_code=404, detail="EndereÃ§o nÃ£o encontrado")
 
     db.delete(endereco)
     db.commit()
     return None
+

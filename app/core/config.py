@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # Tempo de expiração do token em minutos
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # Rate limiting
+    RATE_LIMIT_REQUESTS: int = 120
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # Auditoria / retenção
+    AUDIT_RETENTION_DAYS: int = 90
+    AUDIT_CLEANUP_INTERVAL_SECONDS: int = 3600
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

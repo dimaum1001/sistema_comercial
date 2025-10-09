@@ -52,10 +52,15 @@ def login(usuario: UsuarioLogin, db: Session = Depends(get_db)):
 def criar_usuario(usuario: UsuarioCreate, db: Session = Depends(get_db)):
     if db.query(Usuario).filter(Usuario.email == usuario.email).first():
         raise HTTPException(status_code=400, detail="Email já registrado")
+
+    total_usuarios = db.query(Usuario).count()
+    if total_usuarios == 0:
+        tipo_normalizado = "admin"
+    else:
+        tipo_normalizado = (usuario.tipo or "").strip().lower()
+        if tipo_normalizado != "cliente":
+            raise HTTPException(status_code=403, detail="Somente administradores podem definir esse tipo de usuário")
     
-    tipo_normalizado = usuario.tipo.strip().lower()  # 🔥 sempre minúsculo
-    if tipo_normalizado not in ["cliente", "admin"]:
-        raise HTTPException(status_code=400, detail="Tipo de usuário inválido")
     
     novo_usuario = Usuario(
         nome=usuario.nome,

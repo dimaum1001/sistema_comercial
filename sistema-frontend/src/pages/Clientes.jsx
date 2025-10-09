@@ -5,7 +5,9 @@ import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch } from 'react-icons
 
 function maskCpfCnpj(valor) {
   if (!valor) return 'Nao informado'
-  const digits = String(valor).replace(/[^0-9]/g, '')
+  const str = String(valor)
+  if (str.includes('*')) return str
+  const digits = str.replace(/[^0-9]/g, '')
   if (digits.length === 11) {
     return `***.***.***-${digits.slice(-2)}`
   }

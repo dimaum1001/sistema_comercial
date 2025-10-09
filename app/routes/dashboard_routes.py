@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends
+﻿from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
 
 from app.db.database import SessionLocal
+from app.auth.deps import get_current_user
 from app.models.models import Cliente, Produto, Venda
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 def get_db():
     db = SessionLocal()
@@ -17,15 +18,15 @@ def get_db():
 
 @router.get("/dashboard/resumo")
 def get_dashboard_resumo(db: Session = Depends(get_db)):
-    # Datas de referência (UTC para evitar problemas de fuso)
+    # Datas de referÃªncia (UTC para evitar problemas de fuso)
     hoje = datetime.utcnow()
     inicio_mes_atual = datetime(hoje.year, hoje.month, 1)
-    # primeiro dia do próximo mês
+    # primeiro dia do prÃ³ximo mÃªs
     if hoje.month == 12:
         inicio_proximo_mes = datetime(hoje.year + 1, 1, 1)
     else:
         inicio_proximo_mes = datetime(hoje.year, hoje.month + 1, 1)
-    # primeiro dia do mês passado
+    # primeiro dia do mÃªs passado
     if inicio_mes_atual.month == 1:
         inicio_mes_passado = datetime(inicio_mes_atual.year - 1, 12, 1)
     else:
@@ -35,7 +36,7 @@ def get_dashboard_resumo(db: Session = Depends(get_db)):
     total_clientes = db.query(func.count(Cliente.id)).scalar() or 0
     total_produtos = db.query(func.count(Produto.id)).scalar() or 0
 
-    # -------- Novos no mês X mês passado (para % e texto) --------
+    # -------- Novos no mÃªs X mÃªs passado (para % e texto) --------
     # Clientes (usa campo Cliente.criado_em)
     novos_clientes_mes = (
         db.query(func.count(Cliente.id))
@@ -62,7 +63,7 @@ def get_dashboard_resumo(db: Session = Depends(get_db)):
     )
     perc_produtos = calcular_variacao(novos_produtos_mes, novos_produtos_mes_passado)
 
-    # -------- Vendas: somatório do mês atual vs mês passado --------
+    # -------- Vendas: somatÃ³rio do mÃªs atual vs mÃªs passado --------
     # IMPORTANTE: usa colunas 'data_venda' (timestamp) e 'total' (numeric)
     vendas_mes_atual = (
         db.query(func.coalesce(func.sum(Venda.total), 0))
@@ -80,24 +81,24 @@ def get_dashboard_resumo(db: Session = Depends(get_db)):
         # valores principais dos cards
         "total_clientes": int(total_clientes),
         "total_produtos": int(total_produtos),
-        "total_vendas": float(vendas_mes_atual),  # total do MÊS ATUAL
+        "total_vendas": float(vendas_mes_atual),  # total do MÃŠS ATUAL
 
         # textos e percentuais prontos para exibir
         "perc_clientes": perc_clientes,
-        "txt_clientes": f"{format_percent(perc_clientes)} em relação ao mês passado",
+        "txt_clientes": f"{format_percent(perc_clientes)} em relaÃ§Ã£o ao mÃªs passado",
 
         "perc_produtos": perc_produtos,
-        "txt_produtos": f"{format_percent(perc_produtos)} em relação ao mês passado",
+        "txt_produtos": f"{format_percent(perc_produtos)} em relaÃ§Ã£o ao mÃªs passado",
 
         "perc_vendas": perc_vendas,
-        "txt_vendas": f"{format_percent(perc_vendas)} em relação ao mês passado",
+        "txt_vendas": f"{format_percent(perc_vendas)} em relaÃ§Ã£o ao mÃªs passado",
     }
 
 
 # ------------------ helpers ------------------
 
 def calcular_variacao(valor_atual, valor_anterior):
-    """Retorna variação percentual entre atual e anterior (duas casas)."""
+    """Retorna variaÃ§Ã£o percentual entre atual e anterior (duas casas)."""
     if not valor_anterior:
         return 0.0
     return round(((valor_atual - valor_anterior) / valor_anterior) * 100, 2)
@@ -109,3 +110,4 @@ def format_percent(valor):
     if valor < 0:
         return f"{valor}%"
     return "0%"
+

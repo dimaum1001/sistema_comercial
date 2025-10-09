@@ -1,8 +1,8 @@
-"""
+﻿"""
 Rotas para gerenciamento de fornecedores (padronizado).
-- Paginação server-side (page/per_page OU limit/offset; teto=200)
-- Busca server-side (q | search | term | nome/razão) + filtros cnpj_cpf, email, telefone, codigo_fornecedor
-- Cabeçalhos X-Total-Count e Content-Range (0-based, inclusivo) + expose CORS
+- PaginaÃ§Ã£o server-side (page/per_page OU limit/offset; teto=200)
+- Busca server-side (q | search | term | nome/razÃ£o) + filtros cnpj_cpf, email, telefone, codigo_fornecedor
+- CabeÃ§alhos X-Total-Count e Content-Range (0-based, inclusivo) + expose CORS
 - Endpoints /fornecedores/count e /fornecedores/total como fallback
 """
 
@@ -15,10 +15,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text, or_, func
 
 from app.db.database import get_db
+from app.auth.deps import get_current_user
 from app.models.models import Fornecedor, EnderecoFornecedor
 from app.schemas.fornecedor_schema import FornecedorCreate, FornecedorUpdate, FornecedorOut
+from app.utils.privacy import mask_cpf_cnpj, mask_phone
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
+
+
+def _fornecedor_to_out(fornecedor: Fornecedor) -> FornecedorOut:
+    data = FornecedorOut.model_validate(fornecedor)
+    data.cnpj_cpf = mask_cpf_cnpj(data.cnpj_cpf)
+    if data.telefone:
+        data.telefone = mask_phone(data.telefone)
+    if getattr(data, 'contato_telefone', None):
+        data.contato_telefone = mask_phone(data.contato_telefone)
+    return data
 
 
 # ------------------------ utils ------------------------ #
@@ -57,9 +69,9 @@ def _termo_busca(q: Optional[str], search: Optional[str], term: Optional[str], n
 # ------------------------ rotas ------------------------ #
 @router.post("/fornecedores", response_model=FornecedorOut)
 def criar_fornecedor(payload: FornecedorCreate, db: Session = Depends(get_db)) -> Fornecedor:
-    """Cria fornecedor (com endereços opcionais)."""
+    """Cria fornecedor (com endereÃ§os opcionais)."""
     if payload.cnpj_cpf and db.query(Fornecedor).filter(Fornecedor.cnpj_cpf == payload.cnpj_cpf).first():
-        raise HTTPException(status_code=400, detail="Fornecedor já cadastrado com este CNPJ/CPF")
+        raise HTTPException(status_code=400, detail="Fornecedor jÃ¡ cadastrado com este CNPJ/CPF")
 
     dados = payload.model_dump(by_alias=False, exclude={"enderecos"}, exclude_unset=True)
 
@@ -75,7 +87,7 @@ def criar_fornecedor(payload: FornecedorCreate, db: Session = Depends(get_db)) -
     db.add(novo)
     try:
         db.flush()  # garante ID sem precisar commitar ainda
-        # endereços (se houver)
+        # endereÃ§os (se houver)
         for end in payload.enderecos or []:
             data_end = end.model_dump() if hasattr(end, "model_dump") else dict(end)
             data_end["fornecedor_id"] = novo.id
@@ -85,23 +97,23 @@ def criar_fornecedor(payload: FornecedorCreate, db: Session = Depends(get_db)) -
         db.rollback()
         msg = str(e).lower()
         if "unique" in msg or "duplicate" in msg:
-            raise HTTPException(status_code=409, detail="Conflito de unicidade (código ou CNPJ/CPF).")
+            raise HTTPException(status_code=409, detail="Conflito de unicidade (cÃ³digo ou CNPJ/CPF).")
         raise HTTPException(status_code=400, detail="Erro ao criar fornecedor.")
     db.refresh(novo)
-    return novo
+    return _fornecedor_to_out(novo)
 
 
 @router.get("/fornecedores", response_model=List[FornecedorOut])
 def listar_fornecedores(
     response: Response,
-    # paginação (ou modo batch por ids)
+    # paginaÃ§Ã£o (ou modo batch por ids)
     page: Optional[int] = Query(default=None, ge=1),
     per_page: Optional[int] = Query(default=None, ge=1, le=200),
     limit: Optional[int] = Query(default=None, ge=1, le=200),
     offset: Optional[int] = Query(default=None, ge=0),
-    # batch: ?ids=uuid1,uuid2 (sem paginação/headers)
-    ids: Optional[str] = Query(default=None, description="Lista de IDs separados por vírgula"),
-    # busca genérica
+    # batch: ?ids=uuid1,uuid2 (sem paginaÃ§Ã£o/headers)
+    ids: Optional[str] = Query(default=None, description="Lista de IDs separados por vÃ­rgula"),
+    # busca genÃ©rica
     q: Optional[str] = None,
     search: Optional[str] = None,
     term: Optional[str] = None,
@@ -117,8 +129,8 @@ def listar_fornecedores(
     """
     Lista fornecedores.
 
-    - Se `ids` for informado, retorna esses fornecedores (sem paginação e sem cabeçalhos).
-    - Caso contrário, aplica paginação e busca server-side, retornando:
+    - Se `ids` for informado, retorna esses fornecedores (sem paginaÃ§Ã£o e sem cabeÃ§alhos).
+    - Caso contrÃ¡rio, aplica paginaÃ§Ã£o e busca server-side, retornando:
         X-Total-Count  e  Content-Range: items <start>-<end>/<total>  (0-based, inclusivo)
     """
     if ids:
@@ -131,7 +143,7 @@ def listar_fornecedores(
             .filter(Fornecedor.id.in_(id_list))
             .all()
         )
-        return fornecedores
+        return [_fornecedor_to_out(f) for f in fornecedores]
 
     skip, lim = _normaliza_paginacao(page, per_page, limit, offset)
     termo = _termo_busca(q, search, term, nome)
@@ -181,12 +193,12 @@ def listar_fornecedores(
     response.headers["Content-Range"] = f"items {start}-{end}/{total}"
     response.headers["Access-Control-Expose-Headers"] = "X-Total-Count, Content-Range"
 
-    return fornecedores
+    return [_fornecedor_to_out(f) for f in fornecedores]
 
 
 @router.get("/fornecedores/{fornecedor_id}", response_model=FornecedorOut)
 def obter_fornecedor(fornecedor_id: UUID, db: Session = Depends(get_db)) -> Fornecedor:
-    """Obtém um fornecedor pelo ID (inclui endereços)."""
+    """ObtÃ©m um fornecedor pelo ID (inclui endereÃ§os)."""
     fornecedor = (
         db.query(Fornecedor)
         .options(joinedload(Fornecedor.enderecos))
@@ -194,16 +206,16 @@ def obter_fornecedor(fornecedor_id: UUID, db: Session = Depends(get_db)) -> Forn
         .first()
     )
     if not fornecedor:
-        raise HTTPException(status_code=404, detail="Fornecedor não encontrado")
-    return fornecedor
+        raise HTTPException(status_code=404, detail="Fornecedor nÃ£o encontrado")
+    return _fornecedor_to_out(fornecedor)
 
 
 @router.put("/fornecedores/{fornecedor_id}", response_model=FornecedorOut)
 def atualizar_fornecedor(fornecedor_id: UUID, payload: FornecedorUpdate, db: Session = Depends(get_db)) -> Fornecedor:
-    """Atualiza parcialmente fornecedor. Se `enderecos` vier, substitui todos os endereços."""
+    """Atualiza parcialmente fornecedor. Se `enderecos` vier, substitui todos os endereÃ§os."""
     fornecedor = db.query(Fornecedor).filter(Fornecedor.id == fornecedor_id).first()
     if not fornecedor:
-        raise HTTPException(status_code=404, detail="Fornecedor não encontrado")
+        raise HTTPException(status_code=404, detail="Fornecedor nÃ£o encontrado")
 
     dados = payload.model_dump(by_alias=False, exclude_unset=True)
     novos_enderecos = dados.pop("enderecos", None)
@@ -220,7 +232,7 @@ def atualizar_fornecedor(fornecedor_id: UUID, payload: FornecedorUpdate, db: Ses
             .first()
         )
         if existe:
-            raise HTTPException(status_code=409, detail="CNPJ/CPF já cadastrado para outro fornecedor.")
+            raise HTTPException(status_code=409, detail="CNPJ/CPF jÃ¡ cadastrado para outro fornecedor.")
 
     if "nome" in dados and (dados["nome"] or "").strip() == "" and fornecedor.razao_social:
         dados["nome"] = fornecedor.razao_social
@@ -236,7 +248,7 @@ def atualizar_fornecedor(fornecedor_id: UUID, payload: FornecedorUpdate, db: Ses
         db.rollback()
         msg = str(e).lower()
         if "unique" in msg or "duplicate" in msg:
-            raise HTTPException(status_code=409, detail="Conflito de unicidade (código ou CNPJ/CPF).")
+            raise HTTPException(status_code=409, detail="Conflito de unicidade (cÃ³digo ou CNPJ/CPF).")
         raise HTTPException(status_code=400, detail="Erro ao atualizar fornecedor.")
     db.refresh(fornecedor)
 
@@ -249,18 +261,18 @@ def atualizar_fornecedor(fornecedor_id: UUID, payload: FornecedorUpdate, db: Ses
         db.commit()
         db.refresh(fornecedor)
 
-    return fornecedor
+    return _fornecedor_to_out(fornecedor)
 
 
 @router.delete("/fornecedores/{fornecedor_id}")
 def deletar_fornecedor(fornecedor_id: UUID, db: Session = Depends(get_db)):
-    """Remove fornecedor (endereços são removidos em cascata)."""
+    """Remove fornecedor (endereÃ§os sÃ£o removidos em cascata)."""
     fornecedor = db.query(Fornecedor).filter(Fornecedor.id == fornecedor_id).first()
     if not fornecedor:
-        raise HTTPException(status_code=404, detail="Fornecedor não encontrado")
+        raise HTTPException(status_code=404, detail="Fornecedor nÃ£o encontrado")
     db.delete(fornecedor)
     db.commit()
-    return {"message": "Fornecedor excluído com sucesso"}
+    return {"message": "Fornecedor excluÃ­do com sucesso"}
 
 
 # -------------------- endpoints auxiliares de total -------------------- #
@@ -330,3 +342,4 @@ def total_fornecedores_total(
         telefone=telefone,
         db=db,
     )
+

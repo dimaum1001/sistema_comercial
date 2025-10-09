@@ -1,9 +1,9 @@
-"""
+﻿"""
 Rotas para gerenciamento de vendas e seus itens/pagamentos.
 
-Fornece endpoint para criação de vendas com atualização de estoque, cálculo de
-total, geração de parcelas e registro de saldo pendente. Permite ainda
-consultar uma venda específica e listar vendas com paginação. A listagem
+Fornece endpoint para criaÃ§Ã£o de vendas com atualizaÃ§Ã£o de estoque, cÃ¡lculo de
+total, geraÃ§Ã£o de parcelas e registro de saldo pendente. Permite ainda
+consultar uma venda especÃ­fica e listar vendas com paginaÃ§Ã£o. A listagem
 traz itens, cliente e pagamentos relacionados.
 """
 
@@ -14,11 +14,12 @@ from uuid import UUID
 from datetime import datetime, timedelta
 
 from app.db.database import get_db
+from app.auth.deps import get_current_user
 from app.models.models import Venda, VendaItem, Produto, Pagamento, PrecoProduto
 from app.schemas.venda_schema import VendaCreate, VendaResponse
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.post("/vendas", response_model=VendaResponse)
@@ -28,7 +29,7 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
         total_venda: float = 0.0
         nova_venda = Venda(
             cliente_id=payload.cliente_id,
-            usuario_id=None,  # posteriormente pode usar usuário autenticado
+            usuario_id=None,  # posteriormente pode usar usuÃ¡rio autenticado
             desconto=payload.desconto,
             acrescimo=payload.acrescimo,
             observacao=payload.observacao,
@@ -41,18 +42,18 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
         for item in payload.itens:
             produto = db.query(Produto).filter(Produto.id == item.produto_id).first()
             if not produto:
-                raise HTTPException(status_code=404, detail=f"Produto {item.produto_id} não encontrado")
+                raise HTTPException(status_code=404, detail=f"Produto {item.produto_id} nÃ£o encontrado")
             if produto.estoque is None:
                 produto.estoque = 0
             if produto.estoque < item.quantidade:
                 raise HTTPException(status_code=400, detail=f"Estoque insuficiente para {produto.nome}")
-            # busca preço ativo
+            # busca preÃ§o ativo
             preco_ativo = db.query(PrecoProduto).filter(
                 PrecoProduto.produto_id == produto.id,
                 PrecoProduto.ativo == True
             ).order_by(PrecoProduto.data_inicio.desc()).first()
             if not preco_ativo:
-                raise HTTPException(status_code=400, detail=f"Produto {produto.nome} não possui preço ativo")
+                raise HTTPException(status_code=400, detail=f"Produto {produto.nome} nÃ£o possui preÃ§o ativo")
             preco_unit = float(item.preco_unit or preco_ativo.preco or 0)
             subtotal = preco_unit * int(item.quantidade)
             total_venda += subtotal
@@ -64,10 +65,10 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
                 preco_unit=preco_unit
             ))
 
-        # aplica desconto/acréscimo
+        # aplica desconto/acrÃ©scimo
         nova_venda.total = total_venda - float(payload.desconto or 0) + float(payload.acrescimo or 0)
 
-        # Pagamentos (baixa automática + saldo pendente)
+        # Pagamentos (baixa automÃ¡tica + saldo pendente)
         total_pago: float = 0.0
         if payload.pagamentos:
             for pag in payload.pagamentos:
@@ -104,7 +105,7 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
 
         db.commit()
         db.refresh(nova_venda)
-        # força carregamento de relacionamentos
+        # forÃ§a carregamento de relacionamentos
         _ = nova_venda.itens
         _ = nova_venda.cliente
         _ = nova_venda.pagamentos
@@ -118,10 +119,10 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
 
 @router.get("/vendas/{venda_id}", response_model=VendaResponse)
 def obter_venda(venda_id: UUID, db: Session = Depends(get_db)) -> Venda:
-    """Obtém os dados completos de uma venda pelo seu ID."""
+    """ObtÃ©m os dados completos de uma venda pelo seu ID."""
     venda = db.query(Venda).filter(Venda.id == venda_id).first()
     if not venda:
-        raise HTTPException(status_code=404, detail="Venda não encontrada")
+        raise HTTPException(status_code=404, detail="Venda nÃ£o encontrada")
     _ = venda.itens
     _ = venda.cliente
     _ = venda.pagamentos
@@ -130,7 +131,7 @@ def obter_venda(venda_id: UUID, db: Session = Depends(get_db)) -> Venda:
 
 @router.get("/vendas", response_model=List[VendaResponse])
 def listar_vendas(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)) -> List[Venda]:
-    """Lista vendas com paginação, ordenadas pela data de venda decrescente."""
+    """Lista vendas com paginaÃ§Ã£o, ordenadas pela data de venda decrescente."""
     vendas = db.query(Venda).order_by(Venda.data_venda.desc()).offset(skip).limit(limit).all()
     for v in vendas:
         _ = v.itens

@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -8,15 +8,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.database import get_db
+from app.auth.deps import get_current_user
 from app.models.models import Produto, PrecoProduto
 from app.schemas.produto_schema import ProdutoCreate, ProdutoOut, ProdutoUpdate
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 # ------------------------ util ------------------------ #
 def gerar_proximo_codigo_produto(db: Session, largura: int = 6) -> str:
-    """Gera um código sequencial numérico (zero-padded) para produtos."""
+    """Gera um cÃ³digo sequencial numÃ©rico (zero-padded) para produtos."""
     sql = text(
         """
         SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(codigo_produto, '\\D', '', 'g') AS INTEGER)), 0)
@@ -36,7 +37,7 @@ def _normaliza_paginacao(
 ) -> tuple[int, int]:
     """
     Prioriza page/per_page; cai para limit/offset.
-    Aplica teto de 200 por página.
+    Aplica teto de 200 por pÃ¡gina.
     Retorna (skip, lim).
     """
     MAX_PER_PAGE = 200
@@ -61,7 +62,7 @@ def _termo_busca(q: Optional[str], search: Optional[str], term: Optional[str], n
 # ------------------------ rotas ------------------------ #
 @router.post("/produtos", response_model=ProdutoOut)
 def criar_produto(produto: ProdutoCreate, db: Session = Depends(get_db)) -> Produto:
-    """Cria um novo produto e, opcionalmente, seu preço inicial."""
+    """Cria um novo produto e, opcionalmente, seu preÃ§o inicial."""
     dados = produto.model_dump(exclude_unset=True)
 
     # Garante codigo_produto (NOT NULL e UNIQUE)
@@ -73,14 +74,14 @@ def criar_produto(produto: ProdutoCreate, db: Session = Depends(get_db)) -> Prod
     db.add(novo_produto)
 
     try:
-        db.flush()  # para obter ID antes de criar preço
+        db.flush()  # para obter ID antes de criar preÃ§o
     except IntegrityError as e:
         db.rollback()
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
-            raise HTTPException(status_code=409, detail="codigo_produto já existente. Tente novamente.")
+            raise HTTPException(status_code=409, detail="codigo_produto jÃ¡ existente. Tente novamente.")
         raise HTTPException(status_code=400, detail="Erro ao criar produto.")
 
-    # preço inicial (cache no próprio produto)
+    # preÃ§o inicial (cache no prÃ³prio produto)
     if produto.preco_venda is not None:
         preco_inicial = PrecoProduto(
             produto_id=novo_produto.id,
@@ -92,7 +93,7 @@ def criar_produto(produto: ProdutoCreate, db: Session = Depends(get_db)) -> Prod
 
     db.commit()
     db.refresh(novo_produto)
-    _ = novo_produto.precos  # pré-carrega
+    _ = novo_produto.precos  # prÃ©-carrega
     return novo_produto
 
 
@@ -169,7 +170,7 @@ def listar_produtos(
 
     total = base_query.with_entities(func.count(Produto.id)).scalar() or 0
 
-    # ordenação padrão (ajuste se quiser)
+    # ordenaÃ§Ã£o padrÃ£o (ajuste se quiser)
     query = (
         base_query.options(joinedload(Produto.precos))
         .order_by(Produto.nome.asc(), Produto.id.asc())
@@ -179,7 +180,7 @@ def listar_produtos(
 
     produtos = query.all()
 
-    # Cabeçalhos de total & range
+    # CabeÃ§alhos de total & range
     start = 0 if total == 0 else skip + 1
     end = min(skip + lim, total)
     response.headers["X-Total-Count"] = str(total)
@@ -198,20 +199,20 @@ def buscar_produto(produto_id: UUID, db: Session = Depends(get_db)) -> Produto:
         .first()
     )
     if not produto:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
+        raise HTTPException(status_code=404, detail="Produto nÃ£o encontrado")
     return produto
 
 
 @router.put("/produtos/{produto_id}", response_model=ProdutoOut)
 def atualizar_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Session = Depends(get_db)) -> Produto:
-    """Atualiza os dados de um produto e gerencia o histórico de preços."""
+    """Atualiza os dados de um produto e gerencia o histÃ³rico de preÃ§os."""
     produto = db.query(Produto).filter(Produto.id == produto_id).first()
     if not produto:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
+        raise HTTPException(status_code=404, detail="Produto nÃ£o encontrado")
 
     dados_update = produto_update.model_dump(exclude_unset=True)
 
-    # Alteração de preço => fecha preço ativo e cria novo
+    # AlteraÃ§Ã£o de preÃ§o => fecha preÃ§o ativo e cria novo
     if "preco_venda" in dados_update and dados_update["preco_venda"] is not None:
         if dados_update["preco_venda"] != produto.preco_venda:
             preco_ativo = (
@@ -232,7 +233,7 @@ def atualizar_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Sessi
             db.add(novo_preco)
             produto.preco_venda = dados_update["preco_venda"]
 
-    # Não permitir limpar codigo_produto (NOT NULL)
+    # NÃ£o permitir limpar codigo_produto (NOT NULL)
     if "codigo_produto" in dados_update:
         val = (dados_update["codigo_produto"] or "").strip()
         if not val:
@@ -247,7 +248,7 @@ def atualizar_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Sessi
     except IntegrityError as e:
         db.rollback()
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
-            raise HTTPException(status_code=409, detail="codigo_produto já existente.")
+            raise HTTPException(status_code=409, detail="codigo_produto jÃ¡ existente.")
         raise HTTPException(status_code=400, detail="Erro ao atualizar produto.")
 
     db.refresh(produto)
@@ -264,13 +265,13 @@ def patch_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Session =
 # ------- Aliases para compatibilidade com o front -------
 @router.get("/produtos/editar/{produto_id}", response_model=ProdutoOut)
 def buscar_produto_alias_editar(produto_id: UUID, db: Session = Depends(get_db)) -> Produto:
-    """Alias para GET /produtos/{id} (útil se o front chama /produtos/editar/:id)."""
+    """Alias para GET /produtos/{id} (Ãºtil se o front chama /produtos/editar/:id)."""
     return buscar_produto(produto_id, db)
 
 
 @router.put("/produtos/editar/{produto_id}", response_model=ProdutoOut)
 def atualizar_produto_alias_editar(produto_id: UUID, produto_update: ProdutoUpdate, db: Session = Depends(get_db)) -> Produto:
-    """Alias para PUT /produtos/{id} (útil se o front chama /produtos/editar/:id)."""
+    """Alias para PUT /produtos/{id} (Ãºtil se o front chama /produtos/editar/:id)."""
     return atualizar_produto(produto_id, produto_update, db)
 
 
@@ -279,7 +280,7 @@ def deletar_produto(produto_id: UUID, db: Session = Depends(get_db)):
     """Deleta um produto do banco de dados."""
     produto = db.query(Produto).filter(Produto.id == produto_id).first()
     if not produto:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
+        raise HTTPException(status_code=404, detail="Produto nÃ£o encontrado")
     db.delete(produto)
     db.commit()
     return {"detail": "Produto removido com sucesso"}
@@ -319,3 +320,4 @@ def total_produtos_total(
     db: Session = Depends(get_db),
 ):
     return total_produtos_count(q=q, search=search, term=term, nome=nome, db=db)
+

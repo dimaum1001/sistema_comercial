@@ -1,4 +1,4 @@
-# app/routes/relatorios_routes.py
+﻿# app/routes/relatorios_routes.py
 from typing import Optional, Tuple, List
 from datetime import date, timedelta
 
@@ -7,15 +7,16 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc, cast, Date, or_
 
 from app.db.database import get_db
+from app.auth.deps import get_current_user
 from app.models.models import Venda, VendaItem, Produto, Cliente
 
-router = APIRouter(prefix="/relatorios", tags=["Relatórios"])
+router = APIRouter(prefix="/relatorios", tags=["RelatÃ³rios"], dependencies=[Depends(get_current_user)])
 
 
 def _date_range(inicio: Optional[date], fim: Optional[date]) -> Tuple[date, date]:
     """
-    Retorna [di, df) — df é exclusivo (um dia após a data final).
-    Se nada for informado, usa o mês corrente.
+    Retorna [di, df) â€” df Ã© exclusivo (um dia apÃ³s a data final).
+    Se nada for informado, usa o mÃªs corrente.
     """
     today = date.today()
     di = inicio or today.replace(day=1)
@@ -40,7 +41,7 @@ def _normalize_pagination(
 
 
 # ======================
-# Relatório Resumido
+# RelatÃ³rio Resumido
 # ======================
 @router.get("/vendas")
 def vendas_por_periodo(
@@ -52,7 +53,7 @@ def vendas_por_periodo(
 
     vendas = (
         db.query(Venda)
-        .options(joinedload(Venda.pagamentos))  # <— importante
+        .options(joinedload(Venda.pagamentos))  # <â€” importante
         .filter(cast(Venda.data_venda, Date) >= di)
         .filter(cast(Venda.data_venda, Date) < df)
         .all()
@@ -61,7 +62,7 @@ def vendas_por_periodo(
     total_vendas = float(sum(v.total or 0 for v in vendas))
     qtd_vendas = len(vendas)
 
-    # somatório por forma
+    # somatÃ³rio por forma
     formas = {"dinheiro": 0.0, "credito": 0.0, "debito": 0.0, "pix": 0.0, "outros": 0.0}
     for v in vendas:
         for p in getattr(v, "pagamentos", []) or []:
@@ -82,7 +83,7 @@ def vendas_por_periodo(
 
 
 # ======================
-# Relatório Detalhado (Paginado)
+# RelatÃ³rio Detalhado (Paginado)
 # ======================
 @router.get("/vendas/detalhadas")
 def vendas_detalhadas(
@@ -99,7 +100,7 @@ def vendas_detalhadas(
         .options(
             joinedload(Venda.cliente),
             joinedload(Venda.itens).joinedload(VendaItem.produto),
-            joinedload(Venda.pagamentos),  # <— importante
+            joinedload(Venda.pagamentos),  # <â€” importante
         )
         .filter(cast(Venda.data_venda, Date) >= di)
         .filter(cast(Venda.data_venda, Date) < df)
@@ -111,7 +112,7 @@ def vendas_detalhadas(
 
     resultado: List[dict] = []
     for v in vendas:
-        # pagamentos (lista) + formas (apenas rótulos)
+        # pagamentos (lista) + formas (apenas rÃ³tulos)
         pagamentos = [
             {
                 "forma": (p.forma_pagamento or "").lower(),
@@ -124,13 +125,13 @@ def vendas_detalhadas(
         resultado.append({
             "id": str(v.id),
             "data_venda": v.data_venda,
-            "cliente": v.cliente.nome if v.cliente else "—",
+            "cliente": v.cliente.nome if v.cliente else "â€”",
             "total": float(v.total or 0.0),
-            "pagamentos": pagamentos,  # ← agora disponível no front
-            "formas": formas_rotulos,  # ← fallback textual
+            "pagamentos": pagamentos,  # â† agora disponÃ­vel no front
+            "formas": formas_rotulos,  # â† fallback textual
             "itens": [
                 {
-                    "produto": i.produto.nome if i.produto else "—",
+                    "produto": i.produto.nome if i.produto else "â€”",
                     "quantidade": i.quantidade,
                     "preco_unit": float(i.preco_unit),
                     "subtotal": float(i.preco_unit) * i.quantidade,
@@ -139,7 +140,7 @@ def vendas_detalhadas(
             ],
         })
 
-    # cabeçalhos de paginação
+    # cabeÃ§alhos de paginaÃ§Ã£o
     start = 0 if total == 0 else (page - 1) * per_page
     end = 0 if total == 0 else min(start + per_page, total) - 1
 
@@ -155,7 +156,7 @@ def vendas_detalhadas(
 # ======================
 # Produtos Mais Vendidos
 # ======================
-@router.get("/relatorios/produtos-mais-vendidos")  # compatível com paths antigos
+@router.get("/relatorios/produtos-mais-vendidos")  # compatÃ­vel com paths antigos
 def _produtos_mais_vendidos_redirect(*args, **kwargs):
     return produtos_mais_vendidos(*args, **kwargs)
 
@@ -196,9 +197,9 @@ def produtos_mais_vendidos(
 @router.get("/estoque-atual")
 def estoque_atual(
     response: Response,
-    alerta: Optional[bool] = Query(None, description="Se true, apenas itens abaixo do mínimo"),
-    q: Optional[str] = Query(None, description="Busca por nome/código"),
-    # paginação
+    alerta: Optional[bool] = Query(None, description="Se true, apenas itens abaixo do mÃ­nimo"),
+    q: Optional[str] = Query(None, description="Busca por nome/cÃ³digo"),
+    # paginaÃ§Ã£o
     page: Optional[int] = Query(default=None, ge=1),
     per_page: Optional[int] = Query(default=None, ge=1, le=200),
     limit: Optional[int] = Query(default=None, ge=1, le=200),
@@ -219,7 +220,7 @@ def estoque_atual(
         like = f"%{q.strip()}%"
         base = base.filter(or_(Produto.nome.ilike(like), Produto.codigo_produto.ilike(like)))
 
-    # COUNT rápido
+    # COUNT rÃ¡pido
     total = base.with_entities(func.count(Produto.id)).scalar() or 0
 
     rows = (
@@ -240,7 +241,7 @@ def estoque_atual(
         # quando filtra depois, o total enviado deve refletir o filtro
         total = len(data)
 
-    # headers de paginação (expostos p/ o browser)
+    # headers de paginaÃ§Ã£o (expostos p/ o browser)
     start = 0 if total == 0 else skip
     end = 0 if total == 0 else min(skip + lim, total) - 1
     response.headers["X-Total-Count"] = str(total)
@@ -279,3 +280,4 @@ def ranking_clientes(
     )
 
     return [dict(r._mapping) for r in rows]
+
