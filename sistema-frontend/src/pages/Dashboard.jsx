@@ -199,21 +199,18 @@ export default function Dashboard() {
           <StatsCard
             title="Total de Vendas"
             value={fmtBRL(resumo.total_vendas)}
-            change={resumo.txt_vendas}
             percent={Number(resumo.perc_vendas) || 0}
             icon={<FiDollarSign size={24} className="text-green-500" />}
           />
           <StatsCard
             title="Produtos em Estoque"
             value={fmtInt(resumo.total_produtos)}
-            change={resumo.txt_produtos}
             percent={Number(resumo.perc_produtos) || 0}
             icon={<FiBox size={24} className="text-blue-500" />}
           />
           <StatsCard
             title="Clientes Ativos"
             value={fmtInt(resumo.total_clientes)}
-            change={resumo.txt_clientes}
             percent={Number(resumo.perc_clientes) || 0}
             icon={<FiUsers size={24} className="text-purple-500" />}
           />

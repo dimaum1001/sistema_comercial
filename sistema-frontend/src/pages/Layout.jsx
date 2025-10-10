@@ -1,5 +1,5 @@
 // src/pages/Layout.jsx
-import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import api from '../services/api'
 
@@ -204,6 +204,9 @@ export default function Layout() {
               🚪 Sair
             </button>
           </div>
+          <p className="text-[11px] text-center text-gray-400">
+            <Link to="/politica-privacidade" className="hover:text-blue-600">Política de Privacidade</Link>
+          </p>
         </nav>
       </aside>
 

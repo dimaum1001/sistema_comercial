@@ -119,6 +119,8 @@ class Cliente(Base):
     observacoes = Column(Text, nullable=True)
     categoria_cliente = Column(String, default='regular')
     data_ultima_compra = Column(DateTime, nullable=True)
+    base_legal_tratamento = Column(String(30), nullable=False, default='execucao_contrato')
+    consentimento_registrado_em = Column(DateTime, nullable=True)
 
     vendas = relationship("Venda", back_populates="cliente")
     enderecos = relationship("Endereco", back_populates="cliente", cascade="all, delete-orphan")
@@ -227,6 +229,8 @@ class Fornecedor(Base):
     contato_telefone = Column(String)
     criado_em = Column(DateTime, default=datetime.utcnow)
     atualizado_em = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    base_legal_tratamento = Column(String(30), nullable=False, default='execucao_contrato')
+    consentimento_registrado_em = Column(DateTime, nullable=True)
 
     enderecos = relationship(
         "EnderecoFornecedor",

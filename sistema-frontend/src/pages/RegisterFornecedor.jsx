@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from '../services/api'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import InputMask from 'react-input-mask'
 import { 
   FiTruck, FiCreditCard, FiPhone, FiSave, FiArrowLeft, 
@@ -19,6 +19,8 @@ export default function RegisterFornecedor() {
     cnpj: '',
     telefone: '',
     email: '',
+    base_legal_tratamento: 'execucao_contrato',
+    consentimento_registrado_em: null,
     endereco: {
       tipo_endereco: 'comercial',
       cep: '',
@@ -54,6 +56,8 @@ export default function RegisterFornecedor() {
             cnpj: fornecedor.cnpj_cpf || '',
             telefone: fornecedor.telefone || '',
             email: fornecedor.email || '',
+            base_legal_tratamento: fornecedor.base_legal_tratamento || 'execucao_contrato',
+            consentimento_registrado_em: fornecedor.consentimento_registrado_em || null,
             endereco: fornecedor.enderecos && fornecedor.enderecos.length > 0 ? {
               tipo_endereco: fornecedor.enderecos[0].tipo_endereco || 'comercial',
               cep: fornecedor.enderecos[0].cep || '',
@@ -86,6 +90,14 @@ export default function RegisterFornecedor() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
+    if (name === 'base_legal_tratamento') {
+      setFormData((prev) => ({
+        ...prev,
+        base_legal_tratamento: value,
+        consentimento_registrado_em: value === 'consentimento' ? prev.consentimento_registrado_em || new Date().toISOString() : null
+      }))
+      return
+    }
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -147,6 +159,12 @@ export default function RegisterFornecedor() {
     }
     if (formData.tipo_pessoa === 'F' && doc.length !== 11) {
       setMensagem({ texto: 'CPF inválido', tipo: 'erro' })
+      setLoading(false)
+      return
+    }
+
+    if (formData.base_legal_tratamento === 'consentimento' && !formData.consentimento_registrado_em) {
+      setMensagem({ texto: 'É necessário registrar o consentimento do titular.', tipo: 'erro' })
       setLoading(false)
       return
     }
@@ -317,6 +335,44 @@ export default function RegisterFornecedor() {
               onChange={handleChange}
             />
           </div>
+
+          {/* Base legal LGPD */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Base legal do tratamento *</label>
+              <select
+                name="base_legal_tratamento"
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={formData.base_legal_tratamento}
+                onChange={handleChange}
+              >
+                <option value="execucao_contrato">Execução de contrato</option>
+                <option value="obrigacao_legal">Cumprimento de obrigação legal</option>
+                <option value="legitimo_interesse">Legítimo interesse</option>
+                <option value="consentimento">Consentimento do titular</option>
+              </select>
+            </div>
+            {formData.base_legal_tratamento === 'consentimento' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Consentimento registrado em</label>
+                <input
+                  type="datetime-local"
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={formData.consentimento_registrado_em ? formData.consentimento_registrado_em.slice(0, 16) : ''}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, consentimento_registrado_em: e.target.value ? new Date(e.target.value).toISOString() : null }))}
+                />
+                <p className="text-[11px] text-gray-500 mt-1">Registre a data/hora em que o titular forneceu o consentimento.</p>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 self-end">
+                Os dados serão tratados com base em {formData.base_legal_tratamento.replace('_', ' ')}.
+              </div>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-500">
+            Consulte a <Link to="/politica-privacidade" className="text-blue-600 hover:underline">Política de Privacidade</Link> para conhecer as finalidades de cada base legal.
+          </p>
 
           {/* Endereço */}
           <h3 className="text-lg font-semibold text-gray-700 pt-2">Endereço</h3>

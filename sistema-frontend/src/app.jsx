@@ -24,6 +24,7 @@ import Relatorios from './pages/Relatorios'
 import ProdutoEditar from './pages/ProdutoEditar'
 import RequireAdmin from './components/RequireAdmin' 
 import Auditoria from './pages/Auditoria'
+import PoliticaPrivacidade from './pages/PoliticaPrivacidade'
 
 // --------- Controle reativo de autenticação ----------
 function Private({ children }) {
@@ -64,6 +65,7 @@ export default function App() {
       <Route path="/" element={<Navigate to="/login" />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/politica-privacidade" element={<PoliticaPrivacidade />} />
 
       {/* Rotas privadas (todas dentro do Layout) */}
       <Route

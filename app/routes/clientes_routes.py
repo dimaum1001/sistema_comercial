@@ -10,6 +10,7 @@ Rotas para gerenciamento de clientes.
 
 from typing import List, Optional
 from uuid import UUID
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends, Response, Query
 from sqlalchemy import text, or_, func
@@ -85,7 +86,10 @@ def _termo_busca(q: Optional[str], search: Optional[str], term: Optional[str], n
 
 
 def _cliente_to_out(cliente: Cliente) -> ClienteOut:
-    data = ClienteOut.model_validate(cliente)
+    data = ClienteOut.model_validate(cliente, from_attributes=True)
+    data.base_legal_tratamento = data.base_legal_tratamento or "execucao_contrato"
+    if data.base_legal_tratamento != "consentimento":
+        data.consentimento_registrado_em = None
     data.cpf_cnpj = mask_cpf_cnpj(data.cpf_cnpj)
     if data.telefone:
         data.telefone = mask_phone(data.telefone)
@@ -114,6 +118,11 @@ def criar_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)) -> Clie
         telefone=cliente.telefone,
         email=cliente.email,
     )
+    base_legal = cliente.base_legal_tratamento or "execucao_contrato"
+    if base_legal == "consentimento" and not cliente.consentimento_registrado_em:
+        raise HTTPException(status_code=400, detail="Registre a data/hora do consentimento quando a base legal for consentimento.")
+    novo_cliente.base_legal_tratamento = base_legal
+    novo_cliente.consentimento_registrado_em = cliente.consentimento_registrado_em if base_legal == "consentimento" else None
     db.add(novo_cliente)
 
     try:
@@ -278,6 +287,21 @@ def atualizar_cliente(cliente_id: UUID, cliente_update: ClienteUpdate, db: Sessi
         val = (cliente_update.codigo_cliente or "").strip()
         if val:
             cliente.codigo_cliente = val
+
+    if cliente_update.base_legal_tratamento is not None:
+        base_legal = cliente_update.base_legal_tratamento
+        if base_legal == "consentimento":
+            consent_ts = cliente_update.consentimento_registrado_em or cliente.consentimento_registrado_em
+            if consent_ts is None:
+                consent_ts = datetime.utcnow()
+            cliente.consentimento_registrado_em = consent_ts
+        else:
+            cliente.consentimento_registrado_em = None
+        cliente.base_legal_tratamento = base_legal
+    elif cliente_update.consentimento_registrado_em is not None:
+        if cliente.base_legal_tratamento != "consentimento":
+            raise HTTPException(status_code=400, detail="Só é possível registrar consentimento quando a base legal for consentimento.")
+        cliente.consentimento_registrado_em = cliente_update.consentimento_registrado_em
 
     # aplica campos bÃ¡sicos
     if cliente_update.nome is not None:

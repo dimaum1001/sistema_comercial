@@ -1,7 +1,9 @@
-from typing import Optional, List
+from typing import Optional, List, Literal
 from uuid import UUID
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, AliasChoices, field_validator
+
+BASES_LEGAIS_FORNECEDOR = Literal["execucao_contrato", "obrigacao_legal", "legitimo_interesse", "consentimento"]
 
 # Entrada de endereço vinda do formulário (NÃO exige fornecedor_id)
 class EnderecoFornecedorIn(BaseModel):
@@ -60,8 +62,12 @@ class FornecedorBase(BaseModel):
 class FornecedorCreate(FornecedorBase):
     # permite criação com endereços já no payload (sem fornecedor_id)
     enderecos: Optional[List[EnderecoFornecedorIn]] = None
+    base_legal_tratamento: BASES_LEGAIS_FORNECEDOR = "execucao_contrato"
+    consentimento_registrado_em: Optional[datetime] = None
 
 class FornecedorUpdate(BaseModel):
+    base_legal_tratamento: Optional[BASES_LEGAIS_FORNECEDOR] = None
+    consentimento_registrado_em: Optional[datetime] = None
     codigo_fornecedor: Optional[str] = Field(default=None, alias="codigoFornecedor")
     tipo_pessoa: Optional[str] = Field(default=None, pattern="^[FJ]$")
     razao_social: Optional[str] = Field(default=None, validation_alias=AliasChoices("razao_social", "razaoSocial"))
@@ -95,6 +101,8 @@ class FornecedorOut(FornecedorBase):
     codigo_fornecedor: str
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None
+    base_legal_tratamento: str
+    consentimento_registrado_em: Optional[datetime] = None
 
     # devolvemos endereços quando consultado/listado
     enderecos: Optional[list[EnderecoFornecedorIn]] = None

@@ -3,6 +3,39 @@ import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch } from 'react-icons/fi'
 
+function useDebounced(value, delay = 300) {
+  const [currentValue, setCurrentValue] = useState(value)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setCurrentValue(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+
+  return currentValue
+}
+
+const TOTAL_HEADER_KEYS = ['x-total-count', 'x-total', 'x-count', 'x-total-items', 'x-items-count']
+
+function parseTotalFromHeaders(headers = {}) {
+  for (const key of TOTAL_HEADER_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(headers, key)) {
+      const value = headers[key]
+      const numero = Number(value)
+      if (!Number.isNaN(numero)) {
+        return numero
+      }
+    }
+  }
+  const contentRange = headers['content-range']
+  if (typeof contentRange === 'string' && contentRange.includes('/')) {
+    const total = Number(contentRange.split('/').pop())
+    if (!Number.isNaN(total)) {
+      return total
+    }
+  }
+  return null
+}
+
 function maskCpfCnpj(valor) {
   if (!valor) return 'Nao informado'
   const str = String(valor)
@@ -25,6 +58,7 @@ export default function Clientes() {
   const [clientes, setClientes] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const debouncedSearch = useDebounced(searchTerm, 400)
 
   // paginacao
   const [pageSize, setPageSize] = useState(10) // 10, 25, 50, 100
@@ -35,6 +69,31 @@ export default function Clientes() {
   const [totalCount, setTotalCount] = useState(null)
 
   const navigate = useNavigate()
+
+  const fetchTotalFallback = useCallback(async (query) => {
+    try {
+      const term = (query || '').trim()
+      const params = term
+        ? { q: term, search: term, term: term, nome: term }
+        : {}
+      const response = await api.get('/clientes/count', { params })
+      const data = response?.data
+      const total =
+        typeof data === 'number'
+          ? data
+          : typeof data?.total === 'number'
+          ? data.total
+          : typeof data?.count === 'number'
+          ? data.count
+          : null
+      if (total != null) {
+        setTotalCount(total)
+      }
+    } catch (error) {
+      console.error('Erro ao obter total de clientes (fallback):', error)
+      setTotalCount(null)
+    }
+  }, [])
 
   const fetchClientes = useCallback(async () => {
     const token = localStorage.getItem('token')
@@ -48,10 +107,23 @@ export default function Clientes() {
     try {
       const skip = (page - 1) * pageSize
       const limitPlusOne = pageSize + 1
+      const searchValue = debouncedSearch.trim()
+
+      const params = {
+        skip,
+        limit: limitPlusOne,
+      }
+
+      if (searchValue) {
+        params.q = searchValue
+        params.search = searchValue
+        params.term = searchValue
+        params.nome = searchValue
+      }
 
       const response = await api.get('/clientes', {
         headers: { Authorization: `Bearer ${token}` },
-        params: { skip, limit: limitPlusOne },
+        params,
       })
 
       const data = Array.isArray(response.data) ? response.data : []
@@ -62,51 +134,30 @@ export default function Clientes() {
         setHasMore(false)
         setClientes(data)
       }
+
+      const totalFromHeaders = parseTotalFromHeaders(response.headers || {})
+      if (totalFromHeaders != null) {
+        setTotalCount(totalFromHeaders)
+      } else {
+        await fetchTotalFallback(searchValue)
+      }
     } catch (err) {
       console.error('Erro ao buscar clientes:', err)
       setHasMore(false)
       setClientes([])
+      setTotalCount(null)
     } finally {
       setLoading(false)
     }
-  }, [navigate, page, pageSize])
-
-  // Conta o total geral com varias requisicoes (robusto, sem depender de headers)
-  const fetchTotal = useCallback(async () => {
-    const token = localStorage.getItem('token')
-    if (!token) return
-
-    try {
-      const chunk = 1000
-      let skip = 0
-      let total = 0
-
-      // guarda para evitar loop infinito em caso de erro de backend
-      for (let guard = 0; guard < 200; guard++) {
-        const resp = await api.get('/clientes', {
-          headers: { Authorization: `Bearer ${token}` },
-          params: { skip, limit: chunk },
-        })
-        const arr = Array.isArray(resp.data) ? resp.data : []
-        total += arr.length
-        if (arr.length < chunk) break
-        skip += chunk
-      }
-
-      setTotalCount(total)
-    } catch (e) {
-      console.error('Erro ao obter total de clientes:', e)
-      setTotalCount(null)
-    }
-  }, [])
+  }, [debouncedSearch, fetchTotalFallback, navigate, page, pageSize])
 
   useEffect(() => {
     fetchClientes()
   }, [fetchClientes])
 
   useEffect(() => {
-    fetchTotal()
-  }, [fetchTotal])
+    setPage((prev) => (prev === 1 ? prev : 1))
+  }, [debouncedSearch])
 
   const filteredClientes = clientes.filter((cliente) => {
     const nome = (cliente.nome || '').toLowerCase()
@@ -123,9 +174,8 @@ export default function Clientes() {
         await api.delete(`/clientes/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-        // recarrega a pagina atual e o total geral
+        // recarrega a pagina atual
         fetchClientes()
-        fetchTotal()
       } catch (err) {
         console.error('Erro ao excluir cliente:', err)
       }
@@ -213,7 +263,7 @@ export default function Clientes() {
       {filteredClientes.length === 0 ? (
         <div className="bg-white p-8 rounded-xl shadow-sm text-center">
           <p className="text-gray-600 mb-4">
-            {searchTerm ? 'Nenhum cliente encontrado para a pesquisa nesta pagina.' : 'Nenhum cliente nesta pagina.'}
+            {searchTerm ? 'Nenhum cliente encontrado para a pesquisa.' : 'Nenhum cliente nesta pagina.'}
           </p>
           <button
             onClick={() => navigate('/clientes/novo')}
@@ -304,7 +354,7 @@ export default function Clientes() {
           <span className="font-medium">{clientes.length}</span> registros carregados ({pageSize} por pagina)
           {' | '}
           <span className="font-medium">
-            Total geral: {typeof totalCount === 'number' ? totalCount : '--'}
+            {searchTerm ? 'Total encontrados: ' : 'Total geral: '}{typeof totalCount === 'number' ? totalCount : '--'}
           </span>
         </div>
         <div className="flex space-x-2">

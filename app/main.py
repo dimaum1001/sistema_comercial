@@ -1,25 +1,47 @@
 from fastapi import FastAPI
-from sqlalchemy import text
-from app.db.database import engine
-from app.models import models  # Isso garante que os models sejam importados
-from fastapi import FastAPI
-from app.auth import auth_routes
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import categorias_routes, clientes_routes, produtos_routes, vendas_routes, movimentos_routes, endereco_routes, dashboard_routes, fornecedores_routes, usuarios_routes, precos_routes, pagamentos_routes, contas_pagar_routes, relatorios_routes, auditoria_routes
+from sqlalchemy import text
+
+from app.auth import auth_routes
+from app.core.config import settings
+from app.db.database import ensure_schema_integrity, engine
 from app.middleware.audit import AuditMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
-from app.core.config import settings  # onde você lê SECRET_KEY do .env
-
+from app.models import models  # ensures models are imported
+from app.routes import (
+    auditoria_routes,
+    categorias_routes,
+    clientes_routes,
+    contas_pagar_routes,
+    dashboard_routes,
+    endereco_routes,
+    fornecedores_routes,
+    movimentos_routes,
+    pagamentos_routes,
+    precos_routes,
+    produtos_routes,
+    relatorios_routes,
+    usuarios_routes,
+    vendas_routes,
+)
 
 app = FastAPI()
 
-app.add_middleware(RateLimitMiddleware, limit=settings.RATE_LIMIT_REQUESTS, window=settings.RATE_LIMIT_WINDOW_SECONDS)
-app.add_middleware(AuditMiddleware, salt=settings.SECRET_KEY, retention_days=settings.AUDIT_RETENTION_DAYS, cleanup_interval_seconds=settings.AUDIT_CLEANUP_INTERVAL_SECONDS)
+app.add_middleware(
+    RateLimitMiddleware,
+    limit=settings.RATE_LIMIT_REQUESTS,
+    window=settings.RATE_LIMIT_WINDOW_SECONDS,
+)
+app.add_middleware(
+    AuditMiddleware,
+    salt=settings.SECRET_KEY,
+    retention_days=settings.AUDIT_RETENTION_DAYS,
+    cleanup_interval_seconds=settings.AUDIT_CLEANUP_INTERVAL_SECONDS,
+)
 
 origins = [
-    "http://localhost:5173",  # frontend
-    "http://127.0.0.1:5173"   # alternativa
-    
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 app.add_middleware(
@@ -28,7 +50,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Total-Count", "Content-Range"],  # <-- ESSENCIAL
+    expose_headers=["X-Total-Count", "Content-Range"],
 )
 
 app.include_router(auth_routes.router, prefix="/auth")
@@ -48,16 +70,16 @@ app.include_router(contas_pagar_routes.router)
 app.include_router(auditoria_routes.router)
 
 
-
-
 @app.on_event("startup")
 def testar_conexao_supabase():
     try:
+        ensure_schema_integrity()
         with engine.connect() as conn:
             resultado = conn.execute(text("SELECT now()"))
-            print("✅ Conectado ao Supabase com sucesso em", resultado.scalar())
-    except Exception as e:
-        print("❌ Erro ao conectar ao Supabase:", e)
+            print("OK. Conectado ao Supabase em", resultado.scalar())
+    except Exception as exc:
+        print("ERRO ao conectar ao Supabase:", exc)
+
 
 @app.get("/")
 def read_root():

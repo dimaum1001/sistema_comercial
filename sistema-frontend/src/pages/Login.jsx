@@ -156,6 +156,10 @@ export default function Login() {
                 Cadastre-se agora
               </Link>
             </p>
+            <p className="text-xs text-gray-500">
+              Ao acessar voce concorda com nossa{' '}
+              <Link to="/politica-privacidade" className="text-blue-600 hover:underline">Politica de Privacidade</Link>.
+            </p>
           </div>
         </div>
       </div>

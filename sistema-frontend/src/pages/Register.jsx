@@ -10,6 +10,7 @@ export default function Register() {
     senha: '',
     tipo: 'cliente'
   })
+  const [aceitouPolitica, setAceitouPolitica] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
@@ -36,6 +37,12 @@ export default function Register() {
       return
     }
 
+    if (!aceitouPolitica) {
+      setError('Voce precisa aceitar a Politica de Privacidade para continuar.')
+      setLoading(false)
+      return
+    }
+
     try {
       const response = await axios.post('/auth/register', {
         nome: formData.nome.trim(),
@@ -50,7 +57,7 @@ export default function Register() {
       }
     } catch (err) {
       console.error('Registration error:', err)
-      setError(err.response?.data?.message || 'Erro no cadastro. Tente novamente.')
+      setError(err.response?.data?.detail || err.response?.data?.message || 'Erro no cadastro. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -146,24 +153,27 @@ export default function Register() {
             </div>
           </div>
 
-          {/* Tipo de Conta */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Conta</label>
-            <select
-              name="tipo"
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              value={formData.tipo}
-              onChange={handleChange}
-            >
-              <option value="cliente">Cliente</option>
-              <option value="admin">Administrador</option>
-            </select>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600">
+            Ao criar uma conta você receberá o perfil "cliente". Perfis administrativos só podem ser atribuídos por um administrador do sistema.
+          </div>
+
+          <div className="flex items-start gap-2 text-xs text-gray-600">
+            <input
+              id="aceite-politica"
+              type="checkbox"
+              className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded"
+              checked={aceitouPolitica}
+              onChange={(e) => setAceitouPolitica(e.target.checked)}
+            />
+            <label htmlFor="aceite-politica" className="leading-tight">
+              Li e concordo com a <Link className="text-blue-600 hover:underline" to="/politica-privacidade">Politica de Privacidade</Link> e autorizo o tratamento dos dados para as finalidades descritas.
+            </label>
           </div>
 
           {/* Botão de Cadastro */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !aceitouPolitica}
             className={`w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-medium flex items-center justify-center ${
               loading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700'
             }`}

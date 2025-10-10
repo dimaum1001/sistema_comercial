@@ -8,6 +8,7 @@ Rotas para gerenciamento de fornecedores (padronizado).
 
 from typing import List, Optional
 from uuid import UUID
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends, Response, Query
 from sqlalchemy.orm import Session, joinedload
@@ -17,20 +18,42 @@ from sqlalchemy import text, or_, func
 from app.db.database import get_db
 from app.auth.deps import get_current_user
 from app.models.models import Fornecedor, EnderecoFornecedor
-from app.schemas.fornecedor_schema import FornecedorCreate, FornecedorUpdate, FornecedorOut
+from app.schemas.fornecedor_schema import FornecedorCreate, FornecedorUpdate, FornecedorOut, EnderecoFornecedorIn
 from app.utils.privacy import mask_cpf_cnpj, mask_phone
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def _fornecedor_to_out(fornecedor: Fornecedor) -> FornecedorOut:
-    data = FornecedorOut.model_validate(fornecedor)
+    enderecos_modelados = []
+    for end in getattr(fornecedor, "enderecos", []) or []:
+        try:
+            enderecos_modelados.append(EnderecoFornecedorIn.model_validate(end, from_attributes=True))
+        except Exception:
+            # fallback para objetos que ainda não suportam from_attributes
+            enderecos_modelados.append(
+                EnderecoFornecedorIn(
+                    tipo_endereco=getattr(end, "tipo_endereco", None),
+                    logradouro=getattr(end, "logradouro", None),
+                    numero=getattr(end, "numero", None),
+                    complemento=getattr(end, "complemento", None),
+                    bairro=getattr(end, "bairro", None),
+                    cidade=getattr(end, "cidade", None),
+                    estado=getattr(end, "estado", None),
+                    cep=getattr(end, "cep", None),
+                    pais=getattr(end, "pais", None),
+                )
+            )
+
+    data = FornecedorOut.model_validate(fornecedor, from_attributes=True)
+    data.enderecos = enderecos_modelados or None
     data.cnpj_cpf = mask_cpf_cnpj(data.cnpj_cpf)
     if data.telefone:
         data.telefone = mask_phone(data.telefone)
     if getattr(data, 'contato_telefone', None):
         data.contato_telefone = mask_phone(data.contato_telefone)
     return data
+
 
 
 # ------------------------ utils ------------------------ #
@@ -83,7 +106,12 @@ def criar_fornecedor(payload: FornecedorCreate, db: Session = Depends(get_db)) -
     if dados.get("tipo_pessoa") not in ("F", "J"):
         dados["tipo_pessoa"] = "J"
 
+    base_legal = dados.get("base_legal_tratamento", "execucao_contrato") or "execucao_contrato"
+    if base_legal == "consentimento" and not dados.get("consentimento_registrado_em"):
+        raise HTTPException(status_code=400, detail="Fornecedores com base legal consentimento precisam de registro de consentimento.")
     novo = Fornecedor(**dados)
+    novo.base_legal_tratamento = base_legal
+    novo.consentimento_registrado_em = dados.get("consentimento_registrado_em") if base_legal == "consentimento" else None
     db.add(novo)
     try:
         db.flush()  # garante ID sem precisar commitar ainda
@@ -240,6 +268,8 @@ def atualizar_fornecedor(fornecedor_id: UUID, payload: FornecedorUpdate, db: Ses
         dados["tipo_pessoa"] = "J"
 
     for k, v in dados.items():
+        if k in {"base_legal_tratamento", "consentimento_registrado_em"}:
+            continue
         setattr(fornecedor, k, v)
 
     try:
