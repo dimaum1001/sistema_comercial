@@ -29,6 +29,34 @@ function onlyDigits(s) {
 
 const HISTORICO_PAGE_SIZE = 10;
 
+function formatarDataLocal(valor) {
+  if (!valor) return "--";
+
+  const toDate = (raw) => {
+    if (raw instanceof Date) return raw;
+    if (typeof raw === "string") {
+      const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+      const parsed = new Date(normalized);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const data = toDate(valor);
+  if (!data) return String(valor);
+
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  return formatter.format(data);
+}
+
 /**
  * Componente de busca assincrona (typeahead) para ENTIDADE (clientes/produtos)
  * Props principais:
@@ -910,7 +938,7 @@ export default function Vendas() {
                     {vendas.map((v) => (
                       <tr key={v.id} className="border-t">
                         <td className="px-4 py-2">
-                          {new Date(v.data_venda).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                          {formatarDataLocal(v.data_venda)}
                         </td>
                         <td className="px-4 py-2">{v.cliente?.nome || "Sem cliente"}</td>
                         <td className="px-4 py-2 text-right">R$ {Number(v.total).toFixed(2)}</td>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../services/api";
 import { FiBox, FiSave, FiList, FiX } from "react-icons/fi";
 
@@ -215,6 +215,7 @@ export default function MovimentosEstoque() {
   const [produto, setProduto] = useState(null);
   const [tipo, setTipo] = useState("entrada");
   const [quantidade, setQuantidade] = useState(1);
+  const [custoUnitario, setCustoUnitario] = useState("");
   const [observacao, setObservacao] = useState("");
 
   const [estoqueAtual, setEstoqueAtual] = useState(null);
@@ -284,6 +285,7 @@ export default function MovimentosEstoque() {
   async function carregarEstoque(prodId) {
     if (!prodId) {
       setEstoqueAtual(null);
+      setCustoUnitario("");
       return;
     }
     setEstoqueLoading(true);
@@ -293,6 +295,17 @@ export default function MovimentosEstoque() {
       const estRaw = d.estoque ?? d.saldo ?? d.quantidade_estoque ?? d.qtd_estoque ?? null;
       const est = Number(estRaw);
       setEstoqueAtual(Number.isFinite(est) ? est : null);
+      setProduto((prev) => {
+        if (!prev || prev.id !== prodId) return prev;
+        return { ...prev, custo_medio: d.custo_medio, custo: d.custo };
+      });
+      const custoRef = d.custo_medio ?? d.custo;
+      if (custoRef !== undefined && custoRef !== null) {
+        const num = Number(custoRef);
+        if (Number.isFinite(num)) {
+          setCustoUnitario((prev) => (prev ? prev : num.toFixed(2)));
+        }
+      }
     } catch {
       setEstoqueAtual(null);
     } finally {
@@ -311,40 +324,77 @@ export default function MovimentosEstoque() {
 
     if (tipo === "saida" && typeof estoqueAtual === "number" && quantidade > estoqueAtual) {
       setMensagem({
-        texto: `Saída maior que o saldo disponível (${estoqueAtual} un.).`,
+        texto: "Saida maior que o saldo disponivel (" + estoqueAtual + " un.).",
         tipo: "erro",
       });
       return;
     }
 
+    const custoTexto = String(custoUnitario ?? "").trim();
+    let custoValor = null;
+    if (custoTexto !== "") {
+      const normalizado = custoTexto.replace(",", ".").replace(/[^\d.-]/g, "");
+      const parsed = Number.parseFloat(normalizado);
+      if (Number.isFinite(parsed)) {
+        custoValor = parsed;
+      } else {
+        custoValor = Number.NaN;
+      }
+    }
+
+    if (tipo === "entrada") {
+      if (custoTexto === "" || !Number.isFinite(custoValor) || custoValor < 0) {
+        setMensagem({ texto: "Informe um custo unitario valido para entradas.", tipo: "erro" });
+        return;
+      }
+    } else if (custoTexto !== "" && (!Number.isFinite(custoValor) || custoValor < 0)) {
+      setMensagem({ texto: "Custo unitario invalido.", tipo: "erro" });
+      return;
+    }
+
+    const custoPayload =
+      custoValor !== null && Number.isFinite(custoValor) ? Number(custoValor.toFixed(2)) : undefined;
+
     setMensagem({ texto: "", tipo: "" });
     setLoading(true);
     try {
-      await api.post("/estoque/movimentar", {
+      const payload = {
         produto_id: produto.id,
         tipo,
         quantidade: Number(quantidade),
-        observacao,
-      });
+        observacao: observacao || undefined,
+      };
+      if (custoPayload !== undefined) {
+        payload.custo_unitario = custoPayload;
+      }
 
-      setMensagem({ texto: "Movimentação registrada com sucesso!", tipo: "sucesso" });
+      await api.post("/estoque/movimentar", payload);
+
+      setMensagem({ texto: "Movimentacao registrada com sucesso!", tipo: "sucesso" });
       setTipo("entrada");
       setQuantidade(1);
       setObservacao("");
+      setCustoUnitario("");
 
       await carregarEstoque(produto.id);
-      // volta para a página 1 para o usuário já ver a movimentação recente
+      // volta para a pagina 1 para o usuario ja ver a movimentacao recente
       setPage(1);
       await carregarMovimentos();
     } catch (err) {
-      const errorMsg = err?.response?.data?.detail || "Erro ao registrar movimentação";
+      const errorMsg = err?.response?.data?.detail || "Erro ao registrar movimentacao";
       setMensagem({ texto: errorMsg, tipo: "erro" });
     } finally {
       setLoading(false);
     }
   }
-
   /* --------- helpers UI --------- */
+  const formatMoney = (value) => {
+    if (value === null || value === undefined) return "-";
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "-";
+    return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  };
+
   const estoqueBadgeClass = (n) => {
     if (n <= 0) return "bg-red-100 text-red-800";
     if (n < 10) return "bg-yellow-100 text-yellow-800";
@@ -414,6 +464,7 @@ export default function MovimentosEstoque() {
                       onClick={() => {
                         setProduto(null);
                         setEstoqueAtual(null);
+                        setCustoUnitario("");
                       }}
                     >
                       Trocar
@@ -468,6 +519,27 @@ export default function MovimentosEstoque() {
                   </span>
                 </p>
               )}
+            </div>
+
+            {/* Custo unitario */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Custo unitario{tipo === "entrada" ? "*" : " (opcional)"}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                value={custoUnitario}
+                onChange={(e) => setCustoUnitario(e.target.value)}
+                required={tipo === "entrada"}
+              />
+              {tipo === "entrada" ? (
+                <p className="text-[11px] mt-1 text-gray-600">
+                  Informe o custo unitario da entrada para atualizar o custo medio do produto.
+                </p>
+              ) : null}
             </div>
 
             {/* Observação */}
@@ -543,19 +615,21 @@ export default function MovimentosEstoque() {
                   <th className="px-4 py-2 text-left">Produto</th>
                   <th className="px-4 py-2 text-left">Tipo</th>
                   <th className="px-4 py-2 text-right">Quantidade</th>
+                  <th className="px-4 py-2 text-right">Custo unitario</th>
+                  <th className="px-4 py-2 text-right">Valor total</th>
                   <th className="px-4 py-2 text-left">Observação</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                       Carregando...
                     </td>
                   </tr>
                 ) : movimentos.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                       Nenhuma movimentação encontrada.
                     </td>
                   </tr>
@@ -572,6 +646,8 @@ export default function MovimentosEstoque() {
                       <td className="px-4 py-2">{m.produto?.nome || "Produto removido"}</td>
                       <td className="px-4 py-2 capitalize">{m.tipo}</td>
                       <td className="px-4 py-2 text-right">{m.quantidade}</td>
+                      <td className="px-4 py-2 text-right">{formatMoney(m.custo_unitario)}</td>
+                      <td className="px-4 py-2 text-right">{formatMoney(m.valor_total)}</td>
                       <td className="px-4 py-2 text-gray-600">{m.observacao || "-"}</td>
                     </tr>
                   ))

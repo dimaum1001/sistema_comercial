@@ -87,6 +87,7 @@ def vendas_por_periodo(
 # ======================
 @router.get("/vendas/detalhadas")
 def vendas_detalhadas(
+    response: Response,
     inicio: Optional[date] = Query(None),
     fim: Optional[date] = Query(None),
     page: int = Query(1, ge=1),
@@ -108,7 +109,14 @@ def vendas_detalhadas(
     )
 
     total = base.count()
-    vendas = base.offset((page - 1) * per_page).limit(per_page).all()
+    offset = (page - 1) * per_page
+    vendas = base.offset(offset).limit(per_page).all()
+
+    start = 0 if total == 0 else offset
+    end = 0 if total == 0 else min(offset + per_page, total) - 1
+    response.headers["X-Total-Count"] = str(total)
+    response.headers["Content-Range"] = f"items {start}-{end}/{total}"
+    response.headers["Access-Control-Expose-Headers"] = "X-Total-Count, Content-Range"
 
     resultado: List[dict] = []
     for v in vendas:

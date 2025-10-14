@@ -27,13 +27,16 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
     """Cria uma nova venda com itens e pagamentos associados."""
     try:
         total_venda: float = 0.0
+        data_venda_local = datetime.now()
+
         nova_venda = Venda(
             cliente_id=payload.cliente_id,
             usuario_id=None,  # posteriormente pode usar usuÃ¡rio autenticado
             desconto=payload.desconto,
             acrescimo=payload.acrescimo,
             observacao=payload.observacao,
-            status="concluida"
+            status="concluida",
+            data_venda=data_venda_local
         )
         db.add(nova_venda)
         db.flush()
@@ -84,7 +87,7 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
                         forma_pagamento=pag.forma_pagamento,
                         valor=valor_parcela,
                         status="pago",
-                        data_pagamento=datetime.utcnow(),
+                        data_pagamento=data_venda_local,
                         data_vencimento=vencimento,
                         parcela_numero=(i + 1) if qtd_parcelas > 1 else None,
                         parcela_total=qtd_parcelas if qtd_parcelas > 1 else None,
@@ -99,7 +102,7 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
                 forma_pagamento="A Receber",
                 valor=saldo_restante,
                 status="pendente",
-                data_vencimento=datetime.utcnow() + timedelta(days=30),
+                data_vencimento=(data_venda_local + timedelta(days=30)).date(),
                 observacao="Gerado automaticamente (saldo pendente)"
             ))
 

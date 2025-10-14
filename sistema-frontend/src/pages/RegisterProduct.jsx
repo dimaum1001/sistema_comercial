@@ -10,6 +10,7 @@ const initialForm = {
   fornecedor_id: '',
   fornecedor: '',
   custo: '',
+  custo_medio: '',
   preco_venda: '',
   estoque: '',
   estoque_minimo: '',
@@ -27,7 +28,20 @@ export default function RegisterProduct() {
   const navigate = useNavigate()
 
   const handleChange = (field) => (event) => {
-    setForm((prev) => ({ ...prev, [field]: event.target.value }))
+    const { value } = event.target
+    setForm((prev) => {
+      if (field === 'custo') {
+        const next = { ...prev, custo: value }
+        if (!prev.custo_medio) {
+          next.custo_medio = value
+        }
+        return next
+      }
+      if (field === 'custo_medio') {
+        return { ...prev, custo_medio: value }
+      }
+      return { ...prev, [field]: value }
+    })
   }
 
   const handleSubmit = async (event) => {
@@ -69,7 +83,7 @@ export default function RegisterProduct() {
         }
       })
 
-      const floatFields = { custo: form.custo, preco_venda: form.preco_venda }
+      const floatFields = { custo: form.custo, custo_medio: form.custo_medio, preco_venda: form.preco_venda }
       Object.entries(floatFields).forEach(([key, value]) => {
         const trimmed = value.replace(',', '.').trim()
         if (trimmed !== '') {
@@ -174,13 +188,25 @@ export default function RegisterProduct() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Custo (R$)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Custo (última compra - R$)</label>
             <input
               type="text"
               inputMode="decimal"
               className="w-full p-2 border rounded"
               value={form.custo}
               onChange={handleChange('custo')}
+              placeholder="0,00"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Custo médio (R$)</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              className="w-full p-2 border rounded"
+              value={form.custo_medio}
+              onChange={handleChange('custo_medio')}
               placeholder="0,00"
             />
           </div>

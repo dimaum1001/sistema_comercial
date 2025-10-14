@@ -10,6 +10,7 @@ import {
   FiTruck,
   FiRefreshCw,
   FiPlus,
+  FiCreditCard,
 } from 'react-icons/fi';
 
 // Componentes lazy (melhor TTFR)
@@ -33,12 +34,15 @@ export default function Dashboard() {
     total_vendas: 0,
     total_produtos: 0,
     total_clientes: 0,
+    total_contas_pagar: 0,
     txt_vendas: '',
     txt_produtos: '',
     txt_clientes: '',
+    txt_contas_pagar: '',
     perc_vendas: 0,
     perc_produtos: 0,
     perc_clientes: 0,
+    perc_contas_pagar: 0,
   });
 
   // carrega /auth/me e /dashboard/resumo
@@ -188,14 +192,14 @@ export default function Dashboard() {
       {/* Cards de métricas */}
       <Suspense
         fallback={
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {[...Array(3)].map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+            {[...Array(4)].map((_, i) => (
               <div key={i} className="bg-white p-6 rounded-xl shadow-sm h-32 animate-pulse" />
             ))}
           </div>
         }
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
           <StatsCard
             title="Total de Vendas"
             value={fmtBRL(resumo.total_vendas)}
@@ -213,6 +217,12 @@ export default function Dashboard() {
             value={fmtInt(resumo.total_clientes)}
             percent={Number(resumo.perc_clientes) || 0}
             icon={<FiUsers size={24} className="text-purple-500" />}
+          />
+          <StatsCard
+            title="Contas a Pagar Pendentes"
+            value={fmtBRL(resumo.total_contas_pagar)}
+            percent={Number(resumo.perc_contas_pagar) || 0}
+            icon={<FiCreditCard size={24} className="text-red-500" />}
           />
         </div>
       </Suspense>

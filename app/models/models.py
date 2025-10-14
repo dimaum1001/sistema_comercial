@@ -75,6 +75,7 @@ class Produto(Base):
     categoria_id = Column(UUID(as_uuid=True), ForeignKey("categorias.id"), nullable=True)
     codigo_barras = Column(String(50), nullable=True)
     custo = Column(Numeric(10, 2), nullable=True)
+    custo_medio = Column(Numeric(10, 2), nullable=True)
     preco_venda = Column(Numeric(10, 2), nullable=True)
     unidade = Column(String(20), nullable=True)
     marca = Column(String(100), nullable=True)
@@ -187,6 +188,8 @@ class MovimentoEstoque(Base):
     quantidade = Column(Integer, nullable=False)
     data_movimento = Column(DateTime, default=datetime.utcnow)
     observacao = Column(Text, nullable=True)
+    custo_unitario = Column(Numeric(10, 2), nullable=True)
+    valor_total = Column(Numeric(12, 2), nullable=True)
 
     produto = relationship("Produto", back_populates="movimentos")
 

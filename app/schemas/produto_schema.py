@@ -13,6 +13,7 @@ class ProdutoBase(BaseModel):
     nome: Optional[str] = None
     codigo_barras: Optional[str] = None
     custo: Optional[float] = None
+    custo_medio: Optional[float] = None
     preco_venda: Optional[float] = None  # <- já aqui para evitar repetição
     estoque: Optional[int] = None
     estoque_minimo: Optional[int] = None

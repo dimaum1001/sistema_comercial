@@ -17,6 +17,7 @@ const INITIAL_FORM = {
   nome: '',
   preco_venda: '',
   custo: '',
+  custo_medio: '',
   estoque: '',
   estoque_minimo: '',
   unidade: '',
@@ -129,10 +130,22 @@ export default function NovoProduto() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
+    setFormData(prev => {
+      if (name === 'custo') {
+        const next = { ...prev, custo: value }
+        if (!prev.custo_medio) {
+          next.custo_medio = value
+        }
+        return next
+      }
+      if (name === 'custo_medio') {
+        return { ...prev, custo_medio: value }
+      }
+      return {
+        ...prev,
+        [name]: value
+      }
+    })
   }
 
   const handleAtivoChange = (e) => {
@@ -188,6 +201,7 @@ export default function NovoProduto() {
         nome: formData.nome.trim(),
         preco_venda: parseDecimal(formData.preco_venda),
         custo: parseDecimal(formData.custo),
+        custo_medio: parseDecimal(formData.custo_medio),
         estoque: parseInteger(formData.estoque) ?? 0,
         estoque_minimo: parseInteger(formData.estoque_minimo),
         unidade: formData.unidade.trim() || null,
@@ -300,7 +314,7 @@ export default function NovoProduto() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Custo*</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Custo (última compra)*</label>
               <div className="relative">
                 <input
                   type="number"
@@ -308,6 +322,24 @@ export default function NovoProduto() {
                   step="0.01"
                   min="0"
                   value={formData.custo}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="0,00"
+                  required
+                />
+                <FiDollarSign className="absolute left-3 top-3 text-gray-400" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Custo médio*</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  name="custo_medio"
+                  step="0.01"
+                  min="0"
+                  value={formData.custo_medio}
                   onChange={handleChange}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="0,00"
@@ -583,6 +615,7 @@ export default function NovoProduto() {
                 !formData.nome ||
                 !formData.preco_venda ||
                 !formData.custo ||
+                !formData.custo_medio ||
                 !formData.estoque ||
                 !formData.categoria_id ||
                 !formData.fornecedor_id

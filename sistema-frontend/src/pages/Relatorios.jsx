@@ -9,6 +9,43 @@ const fmtBRL = (n) =>
   Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0))
 const fmtInt = (n) => Intl.NumberFormat('pt-BR').format(Number(n || 0))
 const toISO = (d) => d.toISOString().slice(0, 10)
+const fmtDiaHora = (valor) => {
+  if (!valor) return '--'
+
+  const toDate = (raw) => {
+    if (raw instanceof Date) return raw
+    if (typeof raw === 'string') {
+      const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T')
+      const parsed = new Date(normalized)
+      if (!Number.isNaN(parsed.getTime())) return parsed
+    }
+    const parsed = new Date(raw)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const data = toDate(valor)
+  if (!data) return String(valor)
+
+  const formatter = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+
+  const parts = formatter.formatToParts(data)
+  const partValue = (type) => parts.find((p) => p.type === type)?.value || ''
+  const dia = partValue('day')
+  const mes = partValue('month')
+  const hora = partValue('hour')
+  const minuto = partValue('minute')
+
+  if (!dia || !mes || !hora || !minuto) {
+    return formatter.format(data)
+  }
+  return `${dia}/${mes} ${hora}:${minuto}`
+}
 
 export default function Relatorios() {
   const location = useLocation()
@@ -453,7 +490,7 @@ export default function Relatorios() {
                 <tbody>
                   {vdItens.map((v) => (
                     <tr key={v.id} className="border-top">
-                      <td className="py-2 px-3">{v.data_venda}</td>
+                      <td className="py-2 px-3">{fmtDiaHora(v.data_venda)}</td>
                       <td className="py-2 px-3">{v.cliente || ''}</td>
                       <td className="py-2 px-3 text-right">{fmtBRL(v.total)}</td>
                       <td className="py-2 px-3">

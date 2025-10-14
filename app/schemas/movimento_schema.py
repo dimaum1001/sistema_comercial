@@ -26,6 +26,7 @@ class MovimentoCreate(BaseModel):
     tipo: str   # entrada, saida, ajuste
     quantidade: int
     observacao: Optional[str] = None
+    custo_unitario: Optional[float] = Field(default=None, ge=0)
 
 
 class MovimentoResponse(BaseModel):
@@ -34,6 +35,9 @@ class MovimentoResponse(BaseModel):
     quantidade: int
     data_movimento: datetime
     observacao: Optional[str] = None
+    custo_unitario: Optional[float] = None
+    valor_total: Optional[float] = None
     produto: ProdutoOutMovimento  # produto já vem com fornecedor (serializado como "fornecedor")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+

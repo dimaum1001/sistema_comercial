@@ -65,6 +65,13 @@ def criar_produto(produto: ProdutoCreate, db: Session = Depends(get_db)) -> Prod
     """Cria um novo produto e, opcionalmente, seu preÃ§o inicial."""
     dados = produto.model_dump(exclude_unset=True)
 
+    custo_informado = dados.get("custo")
+    custo_medio_informado = dados.get("custo_medio")
+    if custo_medio_informado is None and custo_informado is not None:
+        dados["custo_medio"] = custo_informado
+    if custo_informado is None and custo_medio_informado is not None:
+        dados["custo"] = custo_medio_informado
+
     # Garante codigo_produto (NOT NULL e UNIQUE)
     codigo = dados.get("codigo_produto")
     if not codigo or not str(codigo).strip():
@@ -211,6 +218,13 @@ def atualizar_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Sessi
         raise HTTPException(status_code=404, detail="Produto nÃ£o encontrado")
 
     dados_update = produto_update.model_dump(exclude_unset=True)
+
+    custo_update = dados_update.get("custo")
+    custo_medio_update = dados_update.get("custo_medio")
+    if custo_medio_update is None and custo_update is not None:
+        dados_update.setdefault("custo_medio", custo_update)
+    if custo_update is None and custo_medio_update is not None:
+        dados_update.setdefault("custo", custo_medio_update)
 
     # AlteraÃ§Ã£o de preÃ§o => fecha preÃ§o ativo e cria novo
     if "preco_venda" in dados_update and dados_update["preco_venda"] is not None:

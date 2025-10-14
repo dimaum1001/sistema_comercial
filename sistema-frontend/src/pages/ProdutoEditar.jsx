@@ -240,6 +240,7 @@ export default function ProdutoEditar() {
     codigo_produto: "",
     codigo_barras: "",
     custo: "",
+    custo_medio: "",
     preco_venda: "",
     estoque: "",
     estoque_minimo: "",
@@ -270,6 +271,7 @@ export default function ProdutoEditar() {
           codigo_produto: p.codigo_produto || "",
           codigo_barras: p.codigo_barras || "",
           custo: p.custo ?? "",
+          custo_medio: p.custo_medio ?? p.custo ?? "",
           preco_venda: p.preco_venda ?? "",
           estoque: Number.isFinite(p.estoque) ? String(p.estoque) : "",
           estoque_minimo: Number.isFinite(p.estoque_minimo) ? String(p.estoque_minimo) : "",
@@ -319,7 +321,20 @@ export default function ProdutoEditar() {
     }
   };
 
-  const onChange = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const onChange = (k, v) =>
+    setForm((f) => {
+      if (k === "custo") {
+        const next = { ...f, custo: v };
+        if (!f.custo_medio) {
+          next.custo_medio = v;
+        }
+        return next;
+      }
+      if (k === "custo_medio") {
+        return { ...f, custo_medio: v };
+      }
+      return { ...f, [k]: v };
+    });
 
   /* --------- Submit --------- */
   const onSubmit = async (e) => {
@@ -330,6 +345,7 @@ export default function ProdutoEditar() {
       codigo_produto: form.codigo_produto || undefined,
       codigo_barras: form.codigo_barras || undefined,
       custo: form.custo !== "" ? toNumber2(form.custo) : undefined,
+      custo_medio: form.custo_medio !== "" ? toNumber2(form.custo_medio) : undefined,
       preco_venda: form.preco_venda !== "" ? toNumber2(form.preco_venda) : undefined,
       estoque: form.estoque !== "" ? Number(form.estoque) : undefined,
       estoque_minimo: form.estoque_minimo !== "" ? Number(form.estoque_minimo) : undefined,
@@ -455,12 +471,24 @@ export default function ProdutoEditar() {
 
           {/* Custo */}
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-gray-600">Custo</span>
+            <span className="text-sm text-gray-600">Custo (última compra)</span>
             <input
               className="border border-gray-300 rounded-lg px-3 py-2"
               inputMode="decimal"
               value={form.custo}
               onChange={(e) => onChange("custo", e.target.value)}
+              placeholder="0,00"
+            />
+          </label>
+
+          {/* Custo médio */}
+          <label className="flex flex-col gap-1">
+            <span className="text-sm text-gray-600">Custo médio</span>
+            <input
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              inputMode="decimal"
+              value={form.custo_medio}
+              onChange={(e) => onChange("custo_medio", e.target.value)}
               placeholder="0,00"
             />
           </label>
