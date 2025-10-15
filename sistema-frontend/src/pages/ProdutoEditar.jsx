@@ -234,6 +234,8 @@ export default function ProdutoEditar() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ texto: "", tipo: "" });
+  const [unidades, setUnidades] = useState([]);
+  const [unidadesLoading, setUnidadesLoading] = useState(false);
 
   const [form, setForm] = useState({
     nome: "",
@@ -244,7 +246,7 @@ export default function ProdutoEditar() {
     preco_venda: "",
     estoque: "",
     estoque_minimo: "",
-    unidade: "",
+    unidade_id: "",
     marca: "",
     localizacao: "",
     fornecedor: "",      // rótulo opcional
@@ -275,7 +277,7 @@ export default function ProdutoEditar() {
           preco_venda: p.preco_venda ?? "",
           estoque: Number.isFinite(p.estoque) ? String(p.estoque) : "",
           estoque_minimo: Number.isFinite(p.estoque_minimo) ? String(p.estoque_minimo) : "",
-          unidade: p.unidade || "",
+          unidade_id: p.unidade_id || p?.unidade_medida?.id || "",
           marca: p.marca || "",
           localizacao: p.localizacao || "",
           fornecedor: p.fornecedor || p?.fornecedor_obj?.nome || "",
@@ -293,6 +295,27 @@ export default function ProdutoEditar() {
     };
     load();
   }, [id, token, navigate]);
+
+  useEffect(() => {
+    const fetchUnidades = async () => {
+      if (!token) return;
+      try {
+        setUnidadesLoading(true);
+        const response = await api.get("/unidades-medida", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const lista = Array.isArray(response.data) ? response.data : response.data?.items || [];
+        setUnidades(lista);
+      } catch (err) {
+        console.error("Erro ao carregar unidades de medida:", err);
+        setMsg((prev) => (prev.texto ? prev : { texto: "Erro ao carregar unidades de medida.", tipo: "erro" }));
+      } finally {
+        setUnidadesLoading(false);
+      }
+    };
+
+    fetchUnidades();
+  }, [token]);
 
   /* --------- Fetchers do combobox (server-side) --------- */
   const fetchCategorias = async (term, page) => {
@@ -349,7 +372,6 @@ export default function ProdutoEditar() {
       preco_venda: form.preco_venda !== "" ? toNumber2(form.preco_venda) : undefined,
       estoque: form.estoque !== "" ? Number(form.estoque) : undefined,
       estoque_minimo: form.estoque_minimo !== "" ? Number(form.estoque_minimo) : undefined,
-      unidade: form.unidade || undefined,
       marca: form.marca || undefined,
       localizacao: form.localizacao || undefined,
       fornecedor_id: form.fornecedor_id || undefined,
@@ -358,6 +380,9 @@ export default function ProdutoEditar() {
       data_validade: form.data_validade || undefined,
       ativo: !!form.ativo,
     };
+
+    const unidadeId = (form.unidade_id || "").trim();
+    payload.unidade_id = unidadeId || null;
     setSaving(true);
     setMsg({ texto: "", tipo: "" });
     try {
@@ -531,13 +556,26 @@ export default function ProdutoEditar() {
 
           {/* Unidade */}
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-gray-600">Unidade</span>
-            <input
+            <span className="text-sm text-gray-600">Unidade de Medida*</span>
+            <select
               className="border border-gray-300 rounded-lg px-3 py-2"
-              value={form.unidade}
-              onChange={(e) => onChange("unidade", e.target.value)}
-              placeholder="un, kg, cx…"
-            />
+              value={form.unidade_id}
+              onChange={(e) => onChange("unidade_id", e.target.value)}
+              required
+              disabled={unidadesLoading || unidades.length === 0}
+            >
+              <option value="">Selecione a unidade</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.sigla} - {u.nome}
+                </option>
+              ))}
+            </select>
+            {unidadesLoading ? (
+              <span className="text-xs text-gray-500">Carregando unidades...</span>
+            ) : unidades.length === 0 ? (
+              <span className="text-xs text-red-500">Cadastre unidades antes de editar produtos.</span>
+            ) : null}
           </label>
 
           {/* Marca */}

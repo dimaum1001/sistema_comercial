@@ -38,6 +38,7 @@ def ensure_schema_integrity() -> None:
     with engine.begin() as conn:
         inspector = inspect(conn)
         table_columns = {}
+        existing_tables = set(inspector.get_table_names())
 
         for table, _, _ in migrations:
             if table not in table_columns:
@@ -49,6 +50,12 @@ def ensure_schema_integrity() -> None:
                 conn.execute(text(ddl))
                 columns.add(column)
                 print(f"[db] Added missing column {table}.{column}")
+
+        if "password_reset_tokens" not in existing_tables:
+            from app.models.models import PasswordResetToken
+
+            PasswordResetToken.__table__.create(bind=conn, checkfirst=True)
+            print("[db] Created missing table password_reset_tokens")
 
 
 def get_db():

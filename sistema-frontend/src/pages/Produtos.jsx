@@ -498,7 +498,7 @@ const fetchProdutos = useCallback(async () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {produto.unidade || '-'}
+                      {produto?.unidade_medida?.sigla || "-"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {produto?.categoria?.nome || '-'}

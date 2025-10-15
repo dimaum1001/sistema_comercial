@@ -21,6 +21,7 @@ from app.routes import (
     precos_routes,
     produtos_routes,
     relatorios_routes,
+    unidades_medida_routes,
     usuarios_routes,
     vendas_routes,
 )
@@ -68,6 +69,7 @@ app.include_router(pagamentos_routes.router)
 app.include_router(relatorios_routes.router)
 app.include_router(contas_pagar_routes.router)
 app.include_router(auditoria_routes.router)
+app.include_router(unidades_medida_routes.router)
 
 
 @app.on_event("startup")

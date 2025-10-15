@@ -140,9 +140,9 @@ def vendas_detalhadas(
             "itens": [
                 {
                     "produto": i.produto.nome if i.produto else "â€”",
-                    "quantidade": i.quantidade,
-                    "preco_unit": float(i.preco_unit),
-                    "subtotal": float(i.preco_unit) * i.quantidade,
+                    "quantidade": float(i.quantidade or 0),
+                    "preco_unit": float(i.preco_unit or 0),
+                    "subtotal": float(i.preco_unit or 0) * float(i.quantidade or 0),
                 }
                 for i in v.itens
             ],

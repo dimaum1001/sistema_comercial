@@ -18,6 +18,7 @@ import UsuarioNovo from './pages/UsuarioNovo'
 import UsuarioEditar from './pages/UsuarioEditar'
 import PrecosProdutos from './pages/PrecosProdutos'
 import ContasReceber from './pages/ContasReceber'
+import Unidades from './pages/Unidades'
 // 🔹 Novas páginas
 import ContasPagar from './pages/ContasPagar'
 import Relatorios from './pages/Relatorios'
@@ -25,6 +26,8 @@ import ProdutoEditar from './pages/ProdutoEditar'
 import RequireAdmin from './components/RequireAdmin' 
 import Auditoria from './pages/Auditoria'
 import PoliticaPrivacidade from './pages/PoliticaPrivacidade'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 
 // --------- Controle reativo de autenticação ----------
 function Private({ children }) {
@@ -65,6 +68,8 @@ export default function App() {
       <Route path="/" element={<Navigate to="/login" />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/esqueci-senha" element={<ForgotPassword />} />
+      <Route path="/redefinir-senha" element={<ResetPassword />} />
       <Route path="/politica-privacidade" element={<PoliticaPrivacidade />} />
 
       {/* Rotas privadas (todas dentro do Layout) */}
@@ -91,6 +96,14 @@ export default function App() {
         <Route path="/usuarios/editar/:id" element={<UsuarioEditar />} />
         <Route path="/produtos/precos" element={<PrecosProdutos />} />
         <Route path="/produtos/editar/:id" element={<ProdutoEditar />} />
+        <Route
+          path="/admin/unidades"
+          element={
+            <RequireAdmin>
+              <Unidades />
+            </RequireAdmin>
+          }
+        />
 
 
         {/* Vendas & Estoque */}

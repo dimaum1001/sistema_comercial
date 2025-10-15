@@ -14,7 +14,7 @@ const initialForm = {
   preco_venda: '',
   estoque: '',
   estoque_minimo: '',
-  unidade: '',
+  unidade_id: '',
   marca: '',
   localizacao: '',
   data_validade: '',
@@ -58,7 +58,7 @@ export default function RegisterProduct() {
 
       const payload = {}
 
-      const trimmedFields = ['codigo_produto', 'nome', 'codigo_barras', 'unidade', 'marca', 'fornecedor', 'localizacao']
+      const trimmedFields = ['codigo_produto', 'nome', 'codigo_barras', 'marca', 'fornecedor', 'localizacao']
       trimmedFields.forEach((key) => {
         const value = form[key]?.trim()
         if (value) payload[key] = value
@@ -70,6 +70,10 @@ export default function RegisterProduct() {
 
       if (form.fornecedor_id.trim()) {
         payload.fornecedor_id = form.fornecedor_id.trim()
+      }
+
+      if (form.unidade_id.trim()) {
+        payload.unidade_id = form.unidade_id.trim()
       }
 
       const intFields = { estoque: form.estoque, estoque_minimo: form.estoque_minimo }
@@ -248,13 +252,13 @@ export default function RegisterProduct() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Unidade</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Unidade ID</label>
             <input
               type="text"
               className="w-full p-2 border rounded"
-              value={form.unidade}
-              onChange={handleChange('unidade')}
-              placeholder="Ex: un, cx, kg"
+              value={form.unidade_id}
+              onChange={handleChange('unidade_id')}
+              placeholder="UUID da unidade de medida"
             />
           </div>
 

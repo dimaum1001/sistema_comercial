@@ -298,6 +298,39 @@ export default function Vendas() {
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState({ texto: "", tipo: "" });
 
+  const permiteDecimal = produto?.unidade_medida?.permite_decimal !== false;
+  const unidadeSiglaAtual = produto?.unidade_medida?.sigla || "un.";
+
+  const formatQuantidade = (valor, aceitaDecimal = true) => {
+    const numero = Number(valor);
+    if (!Number.isFinite(numero)) return "0";
+    if (aceitaDecimal) {
+      return (Math.round(numero * 1000) / 1000).toFixed(3).replace(/\.?0+$/, "");
+    }
+    return Math.round(numero).toString();
+  };
+
+  const handleQuantidadeChange = (valor) => {
+    const normalizado = String(valor).replace(",", ".");
+    let parsed = Number(normalizado);
+    if (!Number.isFinite(parsed)) {
+      parsed = 0;
+    }
+    if (parsed < 0) {
+      parsed = 0;
+    }
+    if (permiteDecimal) {
+      parsed = Math.round(parsed * 1000) / 1000;
+    } else {
+      if (parsed > 0 && parsed < 1) {
+        parsed = 1;
+      } else {
+        parsed = Math.max(0, Math.floor(parsed));
+      }
+    }
+    setQuantidade(parsed);
+  };
+
   // ---------- historico ----------
   const carregarVendas = useCallback(async () => {
     setHistoricoLoading(true);
@@ -396,6 +429,9 @@ export default function Vendas() {
       return;
     }
 
+    const permiteDecimalProduto = p?.unidade_medida?.permite_decimal !== false;
+    const unidadeSigla = p?.unidade_medida?.sigla || "un.";
+
     let precoAtivo = extrairPrecoAtivoLocal(p);
 
     if (!Number.isFinite(precoAtivo) || precoAtivo <= 0) {
@@ -419,25 +455,37 @@ export default function Vendas() {
 
     if (typeof estoqueAtual === "number") {
       const disponivel = estoqueAtual - reservado;
-      if (quantidade > disponivel) {
+      const tolerancia = permiteDecimalProduto ? 0.0005 : 0;
+      if (quantidade - disponivel > tolerancia) {
         setMensagem({
-          texto: `Quantidade indisponivel em estoque. Disponivel: ${Math.max(
-            disponivel,
-            0
-          )} un.`,
+          texto: `Quantidade indisponivel em estoque. Disponivel: ${formatQuantidade(
+            Math.max(disponivel, 0),
+            permiteDecimalProduto
+          )} ${unidadeSigla}.`,
           tipo: "erro",
         });
         return;
       }
     }
 
+    const quantidadeFinal = permiteDecimalProduto
+      ? Math.round(Number(quantidade) * 1000) / 1000
+      : Math.max(1, Math.floor(Number(quantidade)));
+
+    if (quantidadeFinal <= 0) {
+      setMensagem({ texto: "Quantidade invalida", tipo: "erro" });
+      return;
+    }
+
     setItens((prev) => [
       ...prev,
       {
         produto_id: p.id,
-        quantidade: Number(quantidade),
+        quantidade: quantidadeFinal,
         preco_unit: Number(precoAtivo),
         nome: p.nome,
+        unidade_sigla: unidadeSigla,
+        permite_decimal: permiteDecimalProduto,
       },
     ]);
 
@@ -556,7 +604,16 @@ export default function Vendas() {
   const reservadoAtual = produto
     ? itens.filter((i) => i.produto_id === produto.id).reduce((s, i) => s + i.quantidade, 0)
     : 0;
-  const disponivel = typeof estoqueAtual === "number" ? Math.max(estoqueAtual - reservadoAtual, 0) : null;
+  const disponivel =
+    typeof estoqueAtual === "number"
+      ? (() => {
+          const calculado = estoqueAtual - reservadoAtual;
+          if (permiteDecimal) {
+            return Math.max(Math.round(calculado * 1000) / 1000, 0);
+          }
+          return Math.max(Math.floor(calculado), 0);
+        })()
+      : null;
 
   // ---------- UI ----------
   return (
@@ -652,10 +709,11 @@ export default function Vendas() {
                       <input
                         type="number"
                         className="w-24 text-sm p-2 border border-gray-300 rounded-lg"
-                        min="1"
+                        min={permiteDecimal ? "0.001" : "1"}
+                        step={permiteDecimal ? "0.001" : "1"}
                         value={quantidade}
-                        onChange={(e) => setQuantidade(Math.max(1, Number(e.target.value) || 1))}
-                        title="Quantidade"
+                        onChange={(e) => handleQuantidadeChange(e.target.value)}
+                        title={permiteDecimal ? "Quantidade (aceita decimais)" : "Quantidade (somente inteiros)"}
                       />
                       <button
                         className="bg-blue-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-blue-700"
@@ -702,10 +760,10 @@ export default function Vendas() {
                       ) : typeof estoqueAtual === "number" ? (
                         <>
                           <span className={`px-2 py-0.5 rounded-full text-[11px] ${estoqueBadgeClass(estoqueAtual)}`}>
-                            Saldo atual: {estoqueAtual} un.
+                            Saldo atual: {formatQuantidade(estoqueAtual, permiteDecimal)} {unidadeSiglaAtual}
                           </span>
                           <span className={`px-2 py-0.5 rounded-full text-[11px] ${estoqueBadgeClass(disponivel ?? 0)}`}>
-                            Disponivel ( no carrinho): {disponivel} un.
+                            Disponivel (no carrinho): {formatQuantidade(disponivel ?? 0, permiteDecimal)} {unidadeSiglaAtual}
                           </span>
                         </>
                       ) : (
@@ -735,7 +793,10 @@ export default function Vendas() {
                         {itens.map((item, idx) => (
                           <tr key={idx} className="border-t">
                             <td className="px-2 py-2">{item.nome}</td>
-                            <td className="px-2 py-2 text-center">{item.quantidade}</td>
+                            <td className="px-2 py-2 text-center">
+                              {formatQuantidade(item.quantidade, item.permite_decimal !== false)}
+                              {item.unidade_sigla ? ` ${item.unidade_sigla}` : ""}
+                            </td>
                             <td className="px-2 py-2 text-right">R$ {item.preco_unit.toFixed(2)}</td>
                             <td className="px-2 py-2 text-right">
                               R$ {(item.preco_unit * item.quantidade).toFixed(2)}

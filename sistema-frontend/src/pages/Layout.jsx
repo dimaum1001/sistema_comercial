@@ -187,6 +187,13 @@ export default function Layout() {
               </button>
               <button
                 type="button"
+                onClick={() => navigate('/admin/unidades')}
+                className={subItemCls(isActive('/admin/unidades'))}
+              >
+                📏 Unidades de Medida
+              </button>
+              <button
+                type="button"
                 onClick={() => navigate('/admin/auditoria')}
                 className={subItemCls(isActive('/admin/auditoria'))}
               >

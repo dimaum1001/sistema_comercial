@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.database import get_db
 from app.auth.deps import get_current_user
-from app.models.models import Produto, PrecoProduto
+from app.models.models import Produto, PrecoProduto, UnidadeMedida
 from app.schemas.produto_schema import ProdutoCreate, ProdutoOut, ProdutoUpdate
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -72,6 +72,15 @@ def criar_produto(produto: ProdutoCreate, db: Session = Depends(get_db)) -> Prod
     if custo_informado is None and custo_medio_informado is not None:
         dados["custo"] = custo_medio_informado
 
+    unidade_id = dados.get("unidade_id")
+    if isinstance(unidade_id, str):
+        unidade_id = unidade_id.strip()
+        dados["unidade_id"] = unidade_id or None
+    if dados.get("unidade_id"):
+        unidade = db.query(UnidadeMedida).filter(UnidadeMedida.id == dados["unidade_id"]).first()
+        if not unidade:
+            raise HTTPException(status_code=404, detail="Unidade de medida năo encontrada.")
+
     # Garante codigo_produto (NOT NULL e UNIQUE)
     codigo = dados.get("codigo_produto")
     if not codigo or not str(codigo).strip():
@@ -100,7 +109,8 @@ def criar_produto(produto: ProdutoCreate, db: Session = Depends(get_db)) -> Prod
 
     db.commit()
     db.refresh(novo_produto)
-    _ = novo_produto.precos  # prÃ©-carrega
+    _ = novo_produto.precos  # pré-carrega
+    _ = novo_produto.unidade_medida
     return novo_produto
 
 
@@ -179,7 +189,10 @@ def listar_produtos(
 
     # ordenaÃ§Ã£o padrÃ£o (ajuste se quiser)
     query = (
-        base_query.options(joinedload(Produto.precos))
+        base_query.options(
+            joinedload(Produto.precos),
+            joinedload(Produto.unidade_medida),
+        )
         .order_by(Produto.nome.asc(), Produto.id.asc())
         .offset(skip)
         .limit(lim)
@@ -201,7 +214,10 @@ def buscar_produto(produto_id: UUID, db: Session = Depends(get_db)) -> Produto:
     """Busca um produto pelo seu identificador."""
     produto = (
         db.query(Produto)
-        .options(joinedload(Produto.precos))
+        .options(
+            joinedload(Produto.precos),
+            joinedload(Produto.unidade_medida),
+        )
         .filter(Produto.id == produto_id)
         .first()
     )
@@ -218,6 +234,16 @@ def atualizar_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Sessi
         raise HTTPException(status_code=404, detail="Produto nÃ£o encontrado")
 
     dados_update = produto_update.model_dump(exclude_unset=True)
+
+    if "unidade_id" in dados_update:
+        unidade_id = dados_update.get("unidade_id")
+        if isinstance(unidade_id, str):
+            unidade_id = unidade_id.strip()
+            dados_update["unidade_id"] = unidade_id or None
+        if dados_update.get("unidade_id"):
+            unidade = db.query(UnidadeMedida).filter(UnidadeMedida.id == dados_update["unidade_id"]).first()
+            if not unidade:
+                raise HTTPException(status_code=404, detail="Unidade de medida năo encontrada.")
 
     custo_update = dados_update.get("custo")
     custo_medio_update = dados_update.get("custo_medio")
@@ -267,6 +293,7 @@ def atualizar_produto(produto_id: UUID, produto_update: ProdutoUpdate, db: Sessi
 
     db.refresh(produto)
     _ = produto.precos
+    _ = produto.unidade_medida
     return produto
 
 

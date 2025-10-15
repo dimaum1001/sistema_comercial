@@ -20,7 +20,7 @@ const INITIAL_FORM = {
   custo_medio: '',
   estoque: '',
   estoque_minimo: '',
-  unidade: '',
+  unidade_id: '',
   marca: '',
   localizacao: '',
   data_validade: '',
@@ -33,8 +33,13 @@ const INITIAL_FORM = {
 
 export default function NovoProduto() {
   const navigate = useNavigate()
+  const usuarioRaw = localStorage.getItem('usuario')
+  const usuario = usuarioRaw ? JSON.parse(usuarioRaw) : null
+  const isAdmin = String(usuario?.tipo || '').toLowerCase() === 'admin'
   const [formData, setFormData] = useState(INITIAL_FORM)
   const [categorias, setCategorias] = useState([])
+  const [unidades, setUnidades] = useState([])
+  const [unidadesLoading, setUnidadesLoading] = useState(false)
   const [novaCategoria, setNovaCategoria] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingCategoria, setLoadingCategoria] = useState(false)
@@ -61,6 +66,27 @@ export default function NovoProduto() {
       }
     }
     fetchCategorias()
+  }, [])
+
+  useEffect(() => {
+    const fetchUnidades = async () => {
+      try {
+        setUnidadesLoading(true)
+        const token = localStorage.getItem('token')
+        const response = await api.get('/unidades-medida', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const lista = Array.isArray(response.data) ? response.data : response.data?.items || []
+        setUnidades(lista)
+      } catch (err) {
+        console.error('Erro ao carregar unidades de medida:', err)
+        setMensagem({ texto: 'Erro ao carregar unidades de medida', tipo: 'erro' })
+      } finally {
+        setUnidadesLoading(false)
+      }
+    }
+
+    fetchUnidades()
   }, [])
 
   useEffect(() => {
@@ -204,7 +230,6 @@ export default function NovoProduto() {
         custo_medio: parseDecimal(formData.custo_medio),
         estoque: parseInteger(formData.estoque) ?? 0,
         estoque_minimo: parseInteger(formData.estoque_minimo),
-        unidade: formData.unidade.trim() || null,
         marca: formData.marca.trim() || null,
         localizacao: formData.localizacao.trim() || null,
         data_validade: formData.data_validade || null,
@@ -213,6 +238,11 @@ export default function NovoProduto() {
         fornecedor_id: formData.fornecedor_id || null,
         fornecedor: formData.fornecedor_texto.trim() || null,
         ativo: Boolean(formData.ativo),
+      }
+
+      const unidadeId = (formData.unidade_id || '').trim()
+      if (unidadeId) {
+        payload.unidade_id = unidadeId
       }
 
       await api.post('/produtos', payload, {
@@ -253,13 +283,26 @@ export default function NovoProduto() {
               <FiPackage className="mr-2" />
               Novo Produto
             </h1>
-            <button
-              onClick={() => navigate('/produtos')}
-              className="flex items-center bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition"
-            >
-              <FiArrowLeft className="mr-1" />
-              Voltar
-            </button>
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/unidades')}
+                  className="flex items-center bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition"
+                >
+                  <FiTag className="mr-1" />
+                  Unidades de Medida
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate('/produtos')}
+                className="flex items-center bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition"
+              >
+                <FiArrowLeft className="mr-1" />
+                Voltar
+              </button>
+            </div>
           </div>
         </div>
 
@@ -380,15 +423,39 @@ export default function NovoProduto() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Unidade</label>
-              <input
-                type="text"
-                name="unidade"
-                value={formData.unidade}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Unidade de Medida*</label>
+              <select
+                name="unidade_id"
+                value={formData.unidade_id}
                 onChange={handleChange}
+                required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Ex: un, cx, kg"
-              />
+                disabled={unidadesLoading || unidades.length === 0}
+              >
+                <option value="">Selecione a unidade</option>
+                {unidades.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.sigla} - {u.nome}
+                  </option>
+                ))}
+              </select>
+              {unidadesLoading ? (
+                <p className="text-xs text-gray-500 mt-1">Carregando unidades...</p>
+              ) : unidades.length === 0 ? (
+                <p className="text-xs text-red-500 mt-1">
+                  Nenhuma unidade encontrada. Cadastre pelo menos uma antes de prosseguir.
+                </p>
+              ) : (
+                isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/admin/unidades')}
+                    className="text-xs text-blue-600 hover:underline underline-offset-2 mt-1"
+                  >
+                    Gerenciar unidades de medida
+                  </button>
+                ) : null
+              )}
             </div>
 
             <div>
@@ -618,6 +685,7 @@ export default function NovoProduto() {
                 !formData.custo_medio ||
                 !formData.estoque ||
                 !formData.categoria_id ||
+                !formData.unidade_id ||
                 !formData.fornecedor_id
               }
               className="flex items-center justify-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-60 disabled:cursor-not-allowed"

@@ -21,10 +21,23 @@ from app.schemas.movimento_schema import MovimentoCreate, MovimentoResponse
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 CENT = Decimal("0.01")
+QTD = Decimal("0.001")
+
+
+def _dec(value, default="0") -> Decimal:
+    if value is None:
+        return Decimal(default)
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
 
 
 def _quantize(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
+
+
+def _quantize_qty(value: Decimal) -> Decimal:
+    return value.quantize(QTD, rounding=ROUND_HALF_UP)
 
 
 @router.post("/estoque/movimentar", response_model=MovimentoResponse)
@@ -34,58 +47,54 @@ def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)
     if not produto:
         raise HTTPException(status_code=404, detail="Produto nÃ£o encontrado")
 
-    if movimento.quantidade <= 0:
-        raise HTTPException(status_code=400, detail="Quantidade deve ser maior que zero")
-
-    estoque_atual = produto.estoque or 0
-    quantidade = movimento.quantidade
-    quantidade_decimal = Decimal(quantidade)
+    estoque_atual_decimal = _quantize_qty(_dec(produto.estoque, "0"))
+    quantidade_decimal = _quantize_qty(_dec(movimento.quantidade))
     custo_unitario_decimal = None
     valor_total_decimal = None
+
+    if quantidade_decimal <= 0:
+        raise HTTPException(status_code=400, detail="Quantidade deve ser maior que zero")
 
     if movimento.tipo == "entrada":
         if movimento.custo_unitario is None:
             raise HTTPException(status_code=400, detail="Informe o custo_unitario para entradas de estoque")
 
-        custo_unitario_decimal = Decimal(str(movimento.custo_unitario))
+        custo_unitario_decimal = _money(_dec(movimento.custo_unitario))
         if custo_unitario_decimal < 0:
             raise HTTPException(status_code=400, detail="custo_unitario deve ser maior ou igual a zero")
 
-        estoque_atual_decimal = Decimal(estoque_atual)
-        novo_estoque_decimal = estoque_atual_decimal + quantidade_decimal
+        novo_estoque_decimal = _qty(estoque_atual_decimal + quantidade_decimal)
         valor_total_decimal = custo_unitario_decimal * quantidade_decimal
 
         custo_referencia = produto.custo_medio if produto.custo_medio is not None else produto.custo
-        total_atual_decimal = (
-            Decimal(str(custo_referencia)) * estoque_atual_decimal if custo_referencia is not None else Decimal("0")
-        )
+        total_atual_decimal = (_dec(custo_referencia, "0") * estoque_atual_decimal) if custo_referencia is not None else Decimal("0")
         novo_total_decimal = total_atual_decimal + valor_total_decimal
         novo_custo_medio = custo_unitario_decimal if novo_estoque_decimal <= 0 else novo_total_decimal / novo_estoque_decimal
 
         produto.custo = _quantize(custo_unitario_decimal)
         produto.custo_medio = _quantize(novo_custo_medio)
-        produto.estoque = estoque_atual + quantidade
+        produto.estoque = novo_estoque_decimal
     elif movimento.tipo == "saida":
-        if estoque_atual < quantidade:
+        if estoque_atual_decimal < quantidade_decimal:
             raise HTTPException(status_code=400, detail="Estoque insuficiente")
 
-        produto.estoque = estoque_atual - quantidade
+        produto.estoque = _qty(estoque_atual_decimal - quantidade_decimal)
 
         if movimento.custo_unitario is not None:
-            custo_unitario_decimal = Decimal(str(movimento.custo_unitario))
+            custo_unitario_decimal = _money(_dec(movimento.custo_unitario))
         else:
             custo_referencia = produto.custo_medio if produto.custo_medio is not None else produto.custo
-            custo_unitario_decimal = Decimal(str(custo_referencia)) if custo_referencia is not None else Decimal("0")
+            custo_unitario_decimal = _money(_dec(custo_referencia, "0")) if custo_referencia is not None else Decimal("0")
 
         if custo_unitario_decimal < 0:
             raise HTTPException(status_code=400, detail="custo_unitario deve ser maior ou igual a zero")
 
         valor_total_decimal = custo_unitario_decimal * quantidade_decimal
     elif movimento.tipo == "ajuste":
-        produto.estoque = quantidade
+        produto.estoque = _qty(quantidade_decimal)
 
         if movimento.custo_unitario is not None:
-            custo_unitario_decimal = Decimal(str(movimento.custo_unitario))
+            custo_unitario_decimal = _money(_dec(movimento.custo_unitario))
             if custo_unitario_decimal < 0:
                 raise HTTPException(status_code=400, detail="custo_unitario deve ser maior ou igual a zero")
             produto.custo = _quantize(custo_unitario_decimal)
@@ -103,7 +112,7 @@ def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)
     novo_movimento = MovimentoEstoque(
         produto_id=movimento.produto_id,
         tipo=movimento.tipo,
-        quantidade=quantidade,
+        quantidade=quantidade_decimal,
         observacao=movimento.observacao,
         custo_unitario=custo_unitario_registro,
         valor_total=valor_total_registro

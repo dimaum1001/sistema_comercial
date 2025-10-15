@@ -1,8 +1,10 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from datetime import datetime, date
+from typing import List, Optional
 from uuid import UUID
-from pydantic import ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .unidade_medida_schema import UnidadeMedidaOut
 
 # ========================
 # Base Produto
@@ -15,9 +17,8 @@ class ProdutoBase(BaseModel):
     custo: Optional[float] = None
     custo_medio: Optional[float] = None
     preco_venda: Optional[float] = None  # <- já aqui para evitar repetição
-    estoque: Optional[int] = None
+    estoque: Optional[float] = None
     estoque_minimo: Optional[int] = None
-    unidade: Optional[str] = None
     marca: Optional[str] = None
     localizacao: Optional[str] = None
     data_validade: Optional[date] = None
@@ -26,6 +27,7 @@ class ProdutoBase(BaseModel):
     # Relacionamentos/refs
     categoria_id: Optional[UUID] = None
     fornecedor_id: Optional[UUID] = None
+    unidade_id: Optional[UUID] = None
 
     # 🔹 Campo texto que existe no Model (nome livre do fornecedor)
     fornecedor: Optional[str] = None
@@ -90,6 +92,7 @@ class ProdutoOut(ProdutoBase):
     # ✅ Relacionamentos completos (sem alias para não conflitar com `fornecedor` texto)
     fornecedor_obj: Optional[FornecedorOut] = None
     categoria: Optional[CategoriaOut] = None
+    unidade_medida: Optional[UnidadeMedidaOut] = None
 
     # Histórico de preços
     precos: List[PrecoProdutoOut] = Field(default_factory=list)

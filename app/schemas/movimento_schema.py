@@ -24,7 +24,7 @@ class ProdutoOutMovimento(BaseModel):
 class MovimentoCreate(BaseModel):
     produto_id: UUID
     tipo: str   # entrada, saida, ajuste
-    quantidade: int
+    quantidade: float
     observacao: Optional[str] = None
     custo_unitario: Optional[float] = Field(default=None, ge=0)
 
@@ -32,7 +32,7 @@ class MovimentoCreate(BaseModel):
 class MovimentoResponse(BaseModel):
     id: UUID
     tipo: str
-    quantidade: int
+    quantidade: float
     data_movimento: datetime
     observacao: Optional[str] = None
     custo_unitario: Optional[float] = None

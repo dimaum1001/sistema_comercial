@@ -2,8 +2,9 @@
 Configurações da aplicação (Pydantic v2 + pydantic-settings).
 """
 
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, EmailStr
 import secrets
 import logging
 
@@ -39,6 +40,19 @@ class Settings(BaseSettings):
     # Auditoria / retenção
     AUDIT_RETENTION_DAYS: int = 90
     AUDIT_CLEANUP_INTERVAL_SECONDS: int = 3600
+
+    # E-mail / redefini��ǜo de senha
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    EMAIL_FROM: Optional[EmailStr] = None
+    EMAIL_FROM_NAME: str = "Sistema Comercial"
+    PASSWORD_RESET_URL_BASE: str = "http://localhost:5173/redefinir-senha"
+    PASSWORD_RESET_TOKEN_TTL_HOURS: int = 2
+    PASSWORD_RESET_DEV_ECHO_TOKEN: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

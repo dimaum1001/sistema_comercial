@@ -1,4 +1,4 @@
-from pydantic import BaseModel, conint
+from pydantic import BaseModel, confloat
 from typing import List, Optional
 from datetime import datetime, date
 from uuid import UUID
@@ -7,7 +7,7 @@ from uuid import UUID
 
 class VendaItemCreate(BaseModel):
     produto_id: UUID
-    quantidade: conint(gt=0)  # type: ignore
+    quantidade: confloat(gt=0)  # type: ignore
     preco_unit: Optional[float] = None
 
 
@@ -43,7 +43,7 @@ class ClienteOut(BaseModel):
 class VendaItemOut(BaseModel):
     id: UUID
     produto_id: UUID
-    quantidade: int
+    quantidade: float
     preco_unit: float
 
     class Config:

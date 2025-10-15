@@ -38,6 +38,21 @@ class Usuario(Base):
     criado_em = Column(DateTime, default=datetime.utcnow)
 
     vendas = relationship("Venda", back_populates="usuario")
+    reset_tokens = relationship("PasswordResetToken", back_populates="usuario", cascade="all, delete-orphan")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    token_hash = Column(String(255), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    usado = Column(Boolean, default=False, nullable=False)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+    usado_em = Column(DateTime, nullable=True)
+
+    usuario = relationship("Usuario", back_populates="reset_tokens")
 
 
 class Categoria(Base):
@@ -63,6 +78,18 @@ class PrecoProduto(Base):
     produto = relationship("Produto", back_populates="precos")
 
 
+class UnidadeMedida(Base):
+    __tablename__ = "unidades_medida"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nome = Column(String(100), nullable=False)
+    sigla = Column(String(20), nullable=False, unique=True)
+    permite_decimal = Column(Boolean, default=True, nullable=False)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    produtos = relationship("Produto", back_populates="unidade_medida")
+
+
 class Produto(Base):
     __tablename__ = "produtos"
 
@@ -70,14 +97,14 @@ class Produto(Base):
     # Código legível de produto (ex.: PROD-0001)
     codigo_produto = Column(String(20), unique=True, nullable=False)
     nome = Column(String, nullable=False)
-    estoque = Column(Integer, default=0)
+    estoque = Column(Numeric(12, 3), default=0)
     criado_em = Column(DateTime, default=datetime.utcnow)
     categoria_id = Column(UUID(as_uuid=True), ForeignKey("categorias.id"), nullable=True)
     codigo_barras = Column(String(50), nullable=True)
     custo = Column(Numeric(10, 2), nullable=True)
     custo_medio = Column(Numeric(10, 2), nullable=True)
     preco_venda = Column(Numeric(10, 2), nullable=True)
-    unidade = Column(String(20), nullable=True)
+    unidade_id = Column(UUID(as_uuid=True), ForeignKey("unidades_medida.id"), nullable=True)
     marca = Column(String(100), nullable=True)
     fornecedor = Column(String(100), nullable=True)  # nome textual opcional
     estoque_minimo = Column(Integer, nullable=True)
@@ -93,6 +120,7 @@ class Produto(Base):
     itens_venda = relationship("VendaItem", back_populates="produto")
     movimentos = relationship("MovimentoEstoque", back_populates="produto", cascade="all, delete-orphan")
     precos = relationship("PrecoProduto", back_populates="produto", cascade="all, delete-orphan")
+    unidade_medida = relationship("UnidadeMedida", back_populates="produtos")
 
 
 class Cliente(Base):
@@ -153,7 +181,7 @@ class VendaItem(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     venda_id = Column(UUID(as_uuid=True), ForeignKey("vendas.id"), nullable=False)
     produto_id = Column(UUID(as_uuid=True), ForeignKey("produtos.id"), nullable=False)
-    quantidade = Column(Integer, nullable=False)
+    quantidade = Column(Numeric(12, 3), nullable=False)
     preco_unit = Column(Numeric(10, 2), nullable=False)
 
     venda = relationship("Venda", back_populates="itens")
@@ -185,7 +213,7 @@ class MovimentoEstoque(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     produto_id = Column(UUID(as_uuid=True), ForeignKey("produtos.id"), nullable=True)
     tipo = Column(String, nullable=False)  # entrada, saida, ajuste
-    quantidade = Column(Integer, nullable=False)
+    quantidade = Column(Numeric(12, 3), nullable=False)
     data_movimento = Column(DateTime, default=datetime.utcnow)
     observacao = Column(Text, nullable=True)
     custo_unitario = Column(Numeric(10, 2), nullable=True)

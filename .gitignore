@@ -1,0 +1,69 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.*.example
+
+# Python caches and artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.dmypy.json
+.pyre/
+.pytype/
+
+# Build outputs
+/build/
+/dist/
+/downloads/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+/sistema_comercial/
+/virtualenv/
+
+# IDE / Editor
+.vscode/
+.idea/
+.ropeproject/
+.spyproject/
+
+# OS files
+Thumbs.db
+.DS_Store
+.Trash-*/
+
+# Logs
+*.log
+*.out
+*.err
+
+# Dependencies caches
+node_modules/
+/.npm/
+/.yarn/
+/.pnpm-store/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# Tooling
+.python-version
+.envrc
