@@ -133,20 +133,21 @@ def vendas_detalhadas(
         resultado.append({
             "id": str(v.id),
             "data_venda": v.data_venda,
-            "cliente": v.cliente.nome if v.cliente else "â€”",
+            "cliente": v.cliente.nome if v.cliente else "Venda sem cliente",
             "total": float(v.total or 0.0),
-            "pagamentos": pagamentos,  # â† agora disponÃ­vel no front
-            "formas": formas_rotulos,  # â† fallback textual
-            "itens": [
-                {
-                    "produto": i.produto.nome if i.produto else "â€”",
-                    "quantidade": float(i.quantidade or 0),
-                    "preco_unit": float(i.preco_unit or 0),
-                    "subtotal": float(i.preco_unit or 0) * float(i.quantidade or 0),
-                }
-                for i in v.itens
-            ],
-        })
+            "pagamentos": pagamentos,
+        "formas": formas_rotulos,
+        "itens": [
+            {
+                "produto": i.produto.nome if i.produto else "Produto removido",
+                "quantidade": float(i.quantidade or 0),
+                "preco_unit": float(i.preco_unit or 0),
+                "subtotal": float(i.preco_unit or 0) * float(i.quantidade or 0),
+            }
+            for i in v.itens
+        ],
+    })
+
 
     # cabeÃ§alhos de paginaÃ§Ã£o
     start = 0 if total == 0 else (page - 1) * per_page

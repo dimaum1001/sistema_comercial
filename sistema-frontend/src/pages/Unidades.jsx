@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FiPlus, FiTrash2, FiRefreshCcw } from "react-icons/fi";
+import { FiPlus, FiTrash2, FiRefreshCcw, FiEdit2, FiX } from "react-icons/fi";
 import api from "../services/api";
 
 function toBoolean(value) {
@@ -15,6 +15,7 @@ export default function Unidades() {
   const [listLoading, setListLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removendoId, setRemovendoId] = useState(null);
+  const [editandoId, setEditandoId] = useState(null);
   const [mensagem, setMensagem] = useState({ texto: "", tipo: "" });
   const [form, setForm] = useState({
     nome: "",
@@ -71,16 +72,25 @@ export default function Unidades() {
         sigla,
         permite_decimal: Boolean(form.permite_decimal),
       };
-      const response = await api.post("/unidades-medida", payload);
-      const criada = response.data;
-      setUnidades((prev) => [criada, ...prev]);
-      setForm({ nome: "", sigla: "", permite_decimal: true });
-      setMensagem({ texto: "Unidade criada com sucesso.", tipo: "sucesso" });
+      if (editandoId) {
+        const response = await api.put(`/unidades-medida/${editandoId}`, payload);
+        const atualizada = response.data;
+        setUnidades((prev) => prev.map((u) => (u.id === editandoId ? atualizada : u)));
+        setMensagem({ texto: "Unidade atualizada com sucesso.", tipo: "sucesso" });
+        setEditandoId(null);
+        setForm({ nome: "", sigla: "", permite_decimal: true });
+      } else {
+        const response = await api.post("/unidades-medida", payload);
+        const criada = response.data;
+        setUnidades((prev) => [criada, ...prev]);
+        setForm({ nome: "", sigla: "", permite_decimal: true });
+        setMensagem({ texto: "Unidade criada com sucesso.", tipo: "sucesso" });
+      }
     } catch (error) {
       const detail =
         error?.response?.data?.detail ||
         (error?.response?.status === 409
-          ? "Já existe uma unidade com essa sigla."
+          ? "Ja existe uma unidade com essa sigla."
           : "Erro ao cadastrar unidade.");
       setMensagem({ texto: detail, tipo: "erro" });
     } finally {
@@ -88,12 +98,27 @@ export default function Unidades() {
     }
   };
 
+  const iniciarEdicao = (unidade) => {
+    resetMensagem();
+    setEditandoId(unidade.id);
+    setForm({
+      nome: unidade.nome || "",
+      sigla: (unidade.sigla || "").toUpperCase(),
+      permite_decimal: toBoolean(unidade.permite_decimal),
+    });
+  };
+
+  const cancelarEdicao = () => {
+    setEditandoId(null);
+    setForm({ nome: "", sigla: "", permite_decimal: true });
+  };
+
   const handleDelete = async (id) => {
     const unidade = unidades.find((u) => u.id === id);
     if (!unidade) return;
 
     const confirmado = window.confirm(
-      `Deseja remover a unidade "${unidade.sigla} - ${unidade.nome}"? Essa ação não pode ser desfeita.`
+      `Deseja remover a unidade "${unidade.sigla} - ${unidade.nome}"? Essa acao nao pode ser desfeita.`
     );
     if (!confirmado) return;
 
@@ -107,7 +132,7 @@ export default function Unidades() {
       const detail =
         error?.response?.data?.detail ||
         (error?.response?.status === 400
-          ? "Não é possível remover: existem produtos associados a esta unidade."
+          ? "Nao e possivel remover: existem produtos associados a esta unidade."
           : "Erro ao remover unidade.");
       setMensagem({ texto: detail, tipo: "erro" });
     } finally {
@@ -148,6 +173,21 @@ export default function Unidades() {
 
         <div className="p-6 border-b border-gray-200">
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {editandoId ? (
+              <div className="md:col-span-3 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                <span>
+                  Editando unidade <strong>{form.sigla || "-"}</strong>
+                  {form.nome ? ` - ${form.nome}` : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={cancelarEdicao}
+                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-2 py-1 text-blue-600 transition hover:bg-blue-100"
+                >
+                  <FiX /> Cancelar
+                </button>
+              </div>
+            ) : null}
             <div className="md:col-span-2">
               <label className="block text-sm text-gray-700 mb-1">Nome da Unidade*</label>
               <input
@@ -190,9 +230,23 @@ export default function Unidades() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2 hover:bg-green-700 transition disabled:opacity-60"
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition disabled:opacity-60 ${
+                  editandoId
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-green-600 text-white hover:bg-green-700"
+                }`}
               >
-                {saving ? "Salvando..." : <> <FiPlus /> Salvar Unidade </>}
+                {saving ? (
+                  editandoId ? "Atualizando..." : "Salvando..."
+                ) : editandoId ? (
+                  <>
+                    <FiEdit2 /> Atualizar Unidade
+                  </>
+                ) : (
+                  <>
+                    <FiPlus /> Salvar Unidade
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -209,7 +263,7 @@ export default function Unidades() {
                   <th className="px-4 py-2 text-left text-gray-600 font-medium">Nome</th>
                   <th className="px-4 py-2 text-left text-gray-600 font-medium">Permite decimal</th>
                   <th className="px-4 py-2 text-left text-gray-600 font-medium">Criado em</th>
-                  <th className="px-4 py-2 text-right text-gray-600 font-medium">Ações</th>
+                  <th className="px-4 py-2 text-right text-gray-600 font-medium">Acoes</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,16 +276,16 @@ export default function Unidades() {
                 ) : unidades.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
-                      Nenhuma unidade cadastrada até o momento.
+                      Nenhuma unidade cadastrada ate o momento.
                     </td>
                   </tr>
                 ) : (
                   unidades.map((u) => (
-                    <tr key={u.id} className="border-t">
+                    <tr key={u.id} className={`border-t ${editandoId === u.id ? "bg-blue-50/80" : ""}`}>
                       <td className="px-4 py-2 font-semibold text-gray-800">{u.sigla}</td>
                       <td className="px-4 py-2 text-gray-700">{u.nome}</td>
                       <td className="px-4 py-2 text-gray-700">
-                        {u.permite_decimal ? "Sim" : "Não"}
+                        {u.permite_decimal ? "Sim" : "Nao"}
                       </td>
                       <td className="px-4 py-2 text-gray-500">
                         {u.criado_em
@@ -241,17 +295,33 @@ export default function Unidades() {
                             })
                           : "-"}
                       </td>
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(u.id)}
-                          className="inline-flex items-center gap-1 px-3 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 transition disabled:opacity-60"
-                          disabled={removendoId === u.id}
-                          title="Remover unidade"
-                        >
-                          <FiTrash2 />
-                          {removendoId === u.id ? "Removendo..." : "Excluir"}
-                        </button>
+                      <td className="px-4 py-2">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => iniciarEdicao(u)}
+                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-md border transition ${
+                              editandoId === u.id
+                                ? "border-blue-200 bg-blue-100 text-blue-700 cursor-default"
+                                : "border-blue-200 text-blue-600 hover:bg-blue-50"
+                            }`}
+                            disabled={editandoId === u.id}
+                            title="Editar unidade"
+                          >
+                            <FiEdit2 />
+                            {editandoId === u.id ? "Editando" : "Editar"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(u.id)}
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 transition disabled:opacity-60"
+                            disabled={removendoId === u.id}
+                            title="Remover unidade"
+                          >
+                            <FiTrash2 />
+                            {removendoId === u.id ? "Removendo..." : "Excluir"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

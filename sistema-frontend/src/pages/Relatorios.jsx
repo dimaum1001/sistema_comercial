@@ -281,15 +281,17 @@ export default function Relatorios() {
       autoTable(doc, {
         startY,
         head: [['Data', 'Cliente', 'Total', 'Pagamento(s)', 'Itens']],
-        body: vdItens.map((v) => [
+        body: vdItens.map((v) => {
+          const nomeCliente = (v.cliente && String(v.cliente).trim()) || 'Venda sem cliente'
+          return [
           v.data_venda,
-          v.cliente || '',
+          nomeCliente,
           fmtBRL(v.total),
           (v.pagamentos?.length
             ? v.pagamentos.map(p => `${(p.forma || p.forma_pagamento || '').toUpperCase()} ${fmtBRL(p.valor)}`).join(' + ')
             : (v.formas?.join(', ').toUpperCase() || '')),
           v.itens?.map((i) => `${i.produto} (x${i.quantidade})`).join(', ')
-        ])
+        ]})
       })
     } else if (tab === 'produtos') {
       autoTable(doc, {
@@ -491,7 +493,7 @@ export default function Relatorios() {
                   {vdItens.map((v) => (
                     <tr key={v.id} className="border-top">
                       <td className="py-2 px-3">{fmtDiaHora(v.data_venda)}</td>
-                      <td className="py-2 px-3">{v.cliente || ''}</td>
+                      <td className="py-2 px-3">{(v.cliente && String(v.cliente).trim()) || 'Venda sem cliente'}</td>
                       <td className="py-2 px-3 text-right">{fmtBRL(v.total)}</td>
                       <td className="py-2 px-3">
                         {v.pagamentos?.length
