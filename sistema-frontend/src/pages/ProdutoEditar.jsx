@@ -477,10 +477,11 @@ export default function ProdutoEditar() {
           <label className="flex flex-col gap-1">
             <span className="text-sm text-gray-600">Código do Produto</span>
             <input
-              className="border border-gray-300 rounded-lg px-3 py-2"
+              className="border border-gray-300 rounded-lg px-3 py-2 bg-gray-100 text-gray-600 cursor-not-allowed"
               value={form.codigo_produto}
-              onChange={(e) => onChange("codigo_produto", e.target.value)}
+              readOnly
               placeholder="Gerado automaticamente se vazio"
+              title="O código do produto não pode ser alterado na edição."
             />
           </label>
 

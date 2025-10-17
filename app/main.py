@@ -13,6 +13,7 @@ from app.routes import (
     categorias_routes,
     clientes_routes,
     contas_pagar_routes,
+    direitos_titulares_routes,
     dashboard_routes,
     endereco_routes,
     fornecedores_routes,
@@ -70,6 +71,7 @@ app.include_router(relatorios_routes.router)
 app.include_router(contas_pagar_routes.router)
 app.include_router(auditoria_routes.router)
 app.include_router(unidades_medida_routes.router)
+app.include_router(direitos_titulares_routes.router)
 
 
 @app.on_event("startup")

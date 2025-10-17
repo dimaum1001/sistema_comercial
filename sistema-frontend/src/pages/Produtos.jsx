@@ -417,8 +417,8 @@ const fetchProdutos = useCallback(async () => {
             <table className="min-w-[1200px] divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Codigo de Barras
+                  <th className="px-6 pr-24 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Codigo
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Nome
@@ -456,16 +456,50 @@ const fetchProdutos = useCallback(async () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Atualizado em
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acoes
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {produtos.map((produto) => (
-                  <tr key={produto.id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600" title={produto.codigo_barras || '-'}>
-                      {produto.codigo_barras || '-'}
+                  <tr
+                    key={produto.id}
+                    className="group relative hover:bg-gray-50 transition-colors focus-within:bg-gray-50"
+                  >
+                    <td
+                      className="relative px-6 py-4 pr-24 text-sm text-gray-700"
+                      title={produto.codigo_barras ? `Cod. barras: ${produto.codigo_barras}` : 'Sem codigo de barras'}
+                    >
+                      <div className="flex flex-col gap-1 max-w-[180px]">
+                        <span className="font-semibold text-gray-900 leading-none">
+                          {produto.codigo_produto || '-'}
+                        </span>
+                        <span className="text-xs text-gray-500 truncate leading-tight">
+                          {produto.codigo_barras ? `Barras: ${produto.codigo_barras}` : 'Sem codigo de barras'}
+                        </span>
+                      </div>
+                      <div
+                        className="invisible opacity-0 absolute right-4 top-1/2 -translate-y-1/2 transform transition duration-150 ease-out group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                      >
+                        <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 shadow-md">
+                          <button
+                            onClick={() => navigate(`/produtos/editar/${produto.id}`)}
+                            className="rounded-full p-1.5 text-blue-600 transition hover:bg-blue-50 hover:text-blue-800"
+                            title="Editar"
+                            type="button"
+                            aria-label={`Editar ${produto?.nome || 'produto'}`}
+                          >
+                            <FiEdit2 />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(produto.id)}
+                            className="rounded-full p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-800"
+                            title="Excluir"
+                            type="button"
+                            aria-label={`Excluir ${produto?.nome || 'produto'}`}
+                          >
+                            <FiTrash2 />
+                          </button>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" title={produto.nome || '-'}>
                       {produto.nome || '-'}
@@ -516,28 +550,6 @@ const fetchProdutos = useCallback(async () => {
                       {produto.atualizado_em
                         ? new Date(produto.atualizado_em).toLocaleDateString('pt-BR')
                         : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => navigate(`/produtos/editar/${produto.id}`)}
-                          className="text-blue-600 hover:text-blue-900 p-1.5 rounded-full hover:bg-blue-50 transition"
-                          title="Editar"
-                          type="button"
-                          aria-label={`Editar ${produto?.nome || 'produto'}`}
-                        >
-                          <FiEdit2 />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(produto.id)}
-                          className="text-red-600 hover:text-red-900 p-1.5 rounded-full hover:bg-red-50 transition"
-                          title="Excluir"
-                          type="button"
-                          aria-label={`Excluir ${produto?.nome || 'produto'}`}
-                        >
-                          <FiTrash2 />
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 ))}

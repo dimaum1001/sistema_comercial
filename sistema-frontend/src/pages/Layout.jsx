@@ -1,7 +1,8 @@
 // src/pages/Layout.jsx
-import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, Link, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import api from '../services/api'
+import { FiUsers, FiShield, FiGrid, FiFileText } from 'react-icons/fi'
 
 export default function Layout() {
   const navigate = useNavigate()
@@ -87,6 +88,13 @@ export default function Layout() {
     location.pathname.startsWith('/relatorios') && relatoriosTab === tabKey
 
   const isAdmin = String(usuario?.tipo || '').toLowerCase() === 'admin'
+  const adminLinks = [
+    { to: '/usuarios', label: 'Usuarios', icon: FiUsers },
+    { to: '/admin/lgpd', label: 'Direitos LGPD', icon: FiShield },
+    { to: '/admin/unidades', label: 'Unidades de Medida', icon: FiGrid },
+    { to: '/admin/auditoria', label: 'Auditoria (Logs)', icon: FiFileText },
+  ]
+
 
   return (
     <div className="min-h-screen flex bg-gray-50">
@@ -178,27 +186,18 @@ export default function Layout() {
 
           {isAdmin && (
             <Section id="admin" title="Admin" icon="🛡️">
-              <button
-                type="button"
-                onClick={() => navigate('/usuarios')}
-                className={subItemCls(isActive('/usuarios'))}
-              >
-                👤 Usuários
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/admin/unidades')}
-                className={subItemCls(isActive('/admin/unidades'))}
-              >
-                📏 Unidades de Medida
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/admin/auditoria')}
-                className={subItemCls(isActive('/admin/auditoria'))}
-              >
-                📜 Auditoria (Logs)
-              </button>
+              {adminLinks.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) => subItemCls(isActive)}
+                >
+                  <span className="flex items-center gap-2">
+                    <Icon className="h-4 w-4" />
+                    <span>{label}</span>
+                  </span>
+                </NavLink>
+              ))}
             </Section>
           )}
 
@@ -211,9 +210,10 @@ export default function Layout() {
               🚪 Sair
             </button>
           </div>
-          <p className="text-[11px] text-center text-gray-400">
-            <Link to="/politica-privacidade" className="hover:text-blue-600">Política de Privacidade</Link>
-          </p>
+          <div className="text-[11px] text-center text-gray-400 space-y-1">
+            <Link to="/politica-privacidade" className="hover:text-blue-600">Politica de Privacidade</Link>
+            <Link to="/lgpd/dpo" className="hover:text-blue-600">Canal LGPD (Titulares)</Link>
+          </div>
         </nav>
       </aside>
 

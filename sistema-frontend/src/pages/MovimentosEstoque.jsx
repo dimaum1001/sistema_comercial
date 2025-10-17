@@ -12,6 +12,37 @@ function useDebouncedValue(value, delay = 300) {
   return debounced;
 }
 
+function formatarDataLocal(valor) {
+  if (!valor) return "--";
+
+  const toDate = (raw) => {
+    if (raw instanceof Date) return raw;
+    if (typeof raw === "string") {
+      const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+      const hasOffset = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
+      const iso = hasOffset ? normalized : `${normalized}Z`;
+      const parsed = new Date(iso);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const data = toDate(valor);
+  if (!data) return String(valor);
+
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Sao_Paulo",
+  });
+
+  return formatter.format(data);
+}
+
 /* ---------------- Typeahead genérico (clientes/produtos) ---------------- */
 function AsyncSearchBox({
   entity,
@@ -636,13 +667,7 @@ export default function MovimentosEstoque() {
                 ) : (
                   movimentos.map((m) => (
                     <tr key={m.id} className="border-t">
-                      <td className="px-4 py-2 text-gray-600">
-                        {m.data_movimento
-                          ? new Date(m.data_movimento).toLocaleString("pt-BR", {
-                              timeZone: "America/Sao_Paulo",
-                            })
-                          : "—"}
-                      </td>
+                      <td className="px-4 py-2 text-gray-600">{formatarDataLocal(m.data_movimento)}</td>
                       <td className="px-4 py-2">{m.produto?.nome || "Produto removido"}</td>
                       <td className="px-4 py-2 capitalize">{m.tipo}</td>
                       <td className="px-4 py-2 text-right">{m.quantidade}</td>

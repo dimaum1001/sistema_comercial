@@ -40,6 +40,16 @@ def _quantize_qty(value: Decimal) -> Decimal:
     return value.quantize(QTD, rounding=ROUND_HALF_UP)
 
 
+def _money(value: Decimal) -> Decimal:
+    """Normaliza valores monetarios (2 casas decimais)."""
+    return _quantize(value)
+
+
+def _qty(value: Decimal) -> Decimal:
+    """Normaliza quantidades de estoque (3 casas decimais)."""
+    return _quantize_qty(value)
+
+
 @router.post("/estoque/movimentar", response_model=MovimentoResponse)
 def movimentar_estoque(movimento: MovimentoCreate, db: Session = Depends(get_db)) -> MovimentoEstoque:
     """Aplica um movimento de estoque para um produto (entrada, saÃ­da ou ajuste)."""

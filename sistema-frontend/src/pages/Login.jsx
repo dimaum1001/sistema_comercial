@@ -160,6 +160,10 @@ export default function Login() {
               Ao acessar voce concorda com nossa{' '}
               <Link to="/politica-privacidade" className="text-blue-600 hover:underline">Politica de Privacidade</Link>.
             </p>
+            <p className="text-xs text-gray-500">
+              Precisa falar com o DPO? Utilize o{' '}
+              <Link to="/lgpd/dpo" className="text-blue-600 hover:underline">Canal LGPD</Link>.
+            </p>
           </div>
         </div>
       </div>

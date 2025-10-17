@@ -93,3 +93,79 @@ def send_password_reset_email(email: str, nome: Optional[str], token: str) -> No
         logger.info("Password reset e-mail sent to %s", email)
     except Exception:
         logger.exception("Failed to deliver password reset e-mail to %s", email)
+
+
+def send_dpo_contact_notification(
+    protocolo: str,
+    nome: str,
+    email: str,
+    assunto: Optional[str],
+    mensagem: str,
+) -> None:
+    """
+    Notify the configured DPO address about a new contact message.
+    """
+    destinatario = (settings.DPO_EMAIL or "").strip()
+    if not destinatario:
+        logger.warning(
+            "DPO email is not configured. Contact %s will not trigger an e-mail notification.",
+            protocolo,
+        )
+        return
+
+    if not _is_smtp_configured():
+        logger.warning(
+            "SMTP settings are missing. Unable to notify DPO about protocol %s.",
+            protocolo,
+        )
+        return
+
+    assunto_email = f"[LGPD] Novo contato de titular - {protocolo}"
+    assunto_resumido = (assunto or "Assunto nao informado").strip()
+    plain_body = (
+        f"Voce recebeu uma nova mensagem atraves do canal LGPD.\n\n"
+        f"Protocolo: {protocolo}\n"
+        f"Nome: {nome}\n"
+        f"E-mail informado: {email}\n"
+        f"Assunto: {assunto_resumido}\n\n"
+        "Mensagem:\n"
+        f"{mensagem}\n"
+    )
+    mensagem_html = mensagem.replace("\n", "<br />")
+    html_body = f"""\
+<p>Voce recebeu uma nova mensagem atraves do canal LGPD.</p>
+<ul>
+  <li><strong>Protocolo:</strong> {protocolo}</li>
+  <li><strong>Nome:</strong> {nome}</li>
+  <li><strong>E-mail informado:</strong> {email}</li>
+  <li><strong>Assunto:</strong> {assunto_resumido}</li>
+</ul>
+<p><strong>Mensagem:</strong></p>
+<p>{mensagem_html}</p>
+"""
+
+    msg = EmailMessage()
+    if settings.EMAIL_FROM:
+        msg["From"] = formataddr((settings.EMAIL_FROM_NAME, settings.EMAIL_FROM))
+    msg["To"] = destinatario
+    msg["Subject"] = assunto_email
+    msg.set_content(plain_body)
+    msg.add_alternative(html_body, subtype="html")
+
+    try:
+        if settings.SMTP_USE_SSL:
+            smtp_class = smtplib.SMTP_SSL
+        else:
+            smtp_class = smtplib.SMTP
+
+        with smtp_class(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as client:
+            client.ehlo()
+            if settings.SMTP_USE_TLS and not settings.SMTP_USE_SSL:
+                client.starttls()
+                client.ehlo()
+            if settings.SMTP_USERNAME:
+                client.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD or "")
+            client.send_message(msg)
+        logger.info("DPO notified about protocol %s", protocolo)
+    except Exception:
+        logger.exception("Failed to notify DPO about protocol %s", protocolo)

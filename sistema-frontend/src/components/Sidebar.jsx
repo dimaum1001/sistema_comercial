@@ -16,6 +16,9 @@ export default function Sidebar() {
           <Link className="block px-2 py-1 hover:bg-gray-100 rounded" to="/admin/unidades">
             Unidades de Medida
           </Link>
+          <Link className="block px-2 py-1 hover:bg-gray-100 rounded" to="/admin/lgpd">
+            Direitos LGPD
+          </Link>
           <Link className="block px-2 py-1 hover:bg-gray-100 rounded" to="/admin/auditoria">
             Auditoria
           </Link>

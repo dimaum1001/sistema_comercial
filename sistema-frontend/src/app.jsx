@@ -28,6 +28,8 @@ import Auditoria from './pages/Auditoria'
 import PoliticaPrivacidade from './pages/PoliticaPrivacidade'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
+import LgpdDireitos from './pages/LgpdDireitos'
+import DpoContato from './pages/DpoContato'
 
 // --------- Controle reativo de autenticação ----------
 function Private({ children }) {
@@ -71,6 +73,7 @@ export default function App() {
       <Route path="/esqueci-senha" element={<ForgotPassword />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />
       <Route path="/politica-privacidade" element={<PoliticaPrivacidade />} />
+      <Route path="/lgpd/dpo" element={<DpoContato />} />
 
       {/* Rotas privadas (todas dentro do Layout) */}
       <Route
@@ -80,56 +83,41 @@ export default function App() {
           </Private>
         }
       >
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="dashboard" element={<Dashboard />} />
 
         {/* Cadastros */}
-        <Route path="/clientes" element={<Clientes />} />
-        <Route path="/clientes/editar/:id" element={<RegisterClient />} />
-        <Route path="/clientes/novo" element={<RegisterClient />} />
-        <Route path="/produtos" element={<Produtos />} />
-        <Route path="/produtos/novo" element={<NovoProduto />} />
-        <Route path="/fornecedores" element={<Fornecedores />} />
-        <Route path="/fornecedores/cadastrar" element={<RegisterFornecedor />} />
-        <Route path="/fornecedores/editar/:id" element={<RegisterFornecedor />} />
-        <Route path="/usuarios" element={<Usuarios />} />
-        <Route path="/usuarios/novo" element={<UsuarioNovo />} />
-        <Route path="/usuarios/editar/:id" element={<UsuarioEditar />} />
-        <Route path="/produtos/precos" element={<PrecosProdutos />} />
-        <Route path="/produtos/editar/:id" element={<ProdutoEditar />} />
-        <Route
-          path="/admin/unidades"
-          element={
-            <RequireAdmin>
-              <Unidades />
-            </RequireAdmin>
-          }
-        />
+        <Route path="clientes" element={<Clientes />} />
+        <Route path="clientes/editar/:id" element={<RegisterClient />} />
+        <Route path="clientes/novo" element={<RegisterClient />} />
+        <Route path="produtos" element={<Produtos />} />
+        <Route path="produtos/novo" element={<NovoProduto />} />
+        <Route path="fornecedores" element={<Fornecedores />} />
+        <Route path="fornecedores/cadastrar" element={<RegisterFornecedor />} />
+        <Route path="fornecedores/editar/:id" element={<RegisterFornecedor />} />
+        <Route path="usuarios" element={<Usuarios />} />
+        <Route path="usuarios/novo" element={<UsuarioNovo />} />
+        <Route path="usuarios/editar/:id" element={<UsuarioEditar />} />
+        <Route path="produtos/precos" element={<PrecosProdutos />} />
+        <Route path="produtos/editar/:id" element={<ProdutoEditar />} />
+        <Route path="admin" element={<RequireAdmin />}>
+          <Route path="lgpd" element={<LgpdDireitos />} />
+          <Route path="unidades" element={<Unidades />} />
+          <Route path="auditoria" element={<Auditoria />} />
+        </Route>
 
 
         {/* Vendas & Estoque */}
-        <Route path="/vendas" element={<Vendas />} />
-        <Route path="/vendas/novo" element={<NovaVenda />} />
-        <Route path="/movimentos" element={<MovimentosEstoque />} />
+        <Route path="vendas" element={<Vendas />} />
+        <Route path="vendas/novo" element={<NovaVenda />} />
+        <Route path="movimentos" element={<MovimentosEstoque />} />
 
         {/* Financeiro */}
-        <Route path="/contas-receber" element={<ContasReceber />} />
-        <Route path="/contas-pagar" element={<ContasPagar />} />
+        <Route path="contas-receber" element={<ContasReceber />} />
+        <Route path="contas-pagar" element={<ContasPagar />} />
 
         {/* Relatórios */}
-        <Route path="/relatorios" element={<Relatorios />} />
+        <Route path="relatorios" element={<Relatorios />} />
       </Route>
-      {/* Rota protegida apenas para admins */}
-      <Route
-        path="/admin/auditoria"
-        element={
-          <Private>
-            <RequireAdmin>
-              <Auditoria />
-            </RequireAdmin>
-          </Private>
-        }
-      />
-
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

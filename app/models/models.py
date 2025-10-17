@@ -39,6 +39,26 @@ class Usuario(Base):
 
     vendas = relationship("Venda", back_populates="usuario")
     reset_tokens = relationship("PasswordResetToken", back_populates="usuario", cascade="all, delete-orphan")
+    direitos_solicitados = relationship(
+        "DataSubjectRequest",
+        foreign_keys="DataSubjectRequest.solicitante_usuario_id",
+        back_populates="solicitante",
+    )
+    direitos_registrados = relationship(
+        "DataSubjectRequest",
+        foreign_keys="DataSubjectRequest.registrado_por_usuario_id",
+        back_populates="registrado_por",
+    )
+    eventos_direitos = relationship(
+        "DataSubjectRequestEvent",
+        foreign_keys="DataSubjectRequestEvent.responsavel_usuario_id",
+        back_populates="responsavel",
+    )
+    dpo_contatos = relationship(
+        "DpoContactMessage",
+        foreign_keys="DpoContactMessage.responsavel_usuario_id",
+        back_populates="responsavel",
+    )
 
 
 class PasswordResetToken(Base):
@@ -328,4 +348,86 @@ class AcessoLog(Base):
     status_code = Column(Integer, nullable=False)
     ip_hash = Column(String(128), nullable=True)
     user_agent = Column(String(300), nullable=True)
-    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)    
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DataSubjectRequest(Base):
+    __tablename__ = "direitos_titulares"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    direito = Column(String(40), nullable=False)
+    status = Column(String(30), nullable=False, default="pendente")
+    titular_tipo = Column(String(50), nullable=False)
+    titular_identificador = Column(String(120), nullable=False)
+    titular_nome = Column(String(150), nullable=True)
+    titular_email = Column(String(150), nullable=True)
+    justificativa = Column(Text, nullable=True)
+    prazo_resposta = Column(DateTime, nullable=False)
+    respondido_em = Column(DateTime, nullable=True)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+    atualizado_em = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    solicitante_usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    registrado_por_usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+
+    solicitante = relationship(
+        "Usuario",
+        foreign_keys=[solicitante_usuario_id],
+        back_populates="direitos_solicitados",
+    )
+    registrado_por = relationship(
+        "Usuario",
+        foreign_keys=[registrado_por_usuario_id],
+        back_populates="direitos_registrados",
+    )
+    eventos = relationship(
+        "DataSubjectRequestEvent",
+        back_populates="solicitacao",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class DataSubjectRequestEvent(Base):
+    __tablename__ = "direitos_titulares_eventos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    solicitacao_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("direitos_titulares.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tipo_evento = Column(String(40), nullable=False)
+    descricao = Column(Text, nullable=True)
+    responsavel_usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    criado_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    solicitacao = relationship("DataSubjectRequest", back_populates="eventos")
+    responsavel = relationship(
+        "Usuario",
+        foreign_keys=[responsavel_usuario_id],
+        back_populates="eventos_direitos",
+    )
+
+
+class DpoContactMessage(Base):
+    __tablename__ = "dpo_contatos"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    protocolo = Column(String(30), unique=True, nullable=False)
+    nome = Column(String(150), nullable=False)
+    email = Column(String(150), nullable=False)
+    assunto = Column(String(120), nullable=True)
+    mensagem = Column(Text, nullable=False)
+    canal = Column(String(30), nullable=False, default="formulario")
+    status = Column(String(30), nullable=False, default="novo")
+    resposta = Column(Text, nullable=True)
+    recebida_em = Column(DateTime, default=datetime.utcnow, nullable=False)
+    atualizada_em = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    respondida_em = Column(DateTime, nullable=True)
+    responsavel_usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+
+    responsavel = relationship(
+        "Usuario",
+        foreign_keys=[responsavel_usuario_id],
+        back_populates="dpo_contatos",
+    )

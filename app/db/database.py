@@ -56,6 +56,37 @@ def ensure_schema_integrity() -> None:
 
             PasswordResetToken.__table__.create(bind=conn, checkfirst=True)
             print("[db] Created missing table password_reset_tokens")
+            existing_tables.add("password_reset_tokens")
+
+        if "direitos_titulares" not in existing_tables:
+            from app.models.models import DataSubjectRequest
+
+            DataSubjectRequest.__table__.create(bind=conn, checkfirst=True)
+            existing_tables.add("direitos_titulares")
+            print("[db] Created missing table direitos_titulares")
+
+        if "direitos_titulares_eventos" not in existing_tables:
+            from app.models.models import DataSubjectRequestEvent
+
+            DataSubjectRequestEvent.__table__.create(bind=conn, checkfirst=True)
+            existing_tables.add("direitos_titulares_eventos")
+            print("[db] Created missing table direitos_titulares_eventos")
+
+        if "dpo_contatos" not in existing_tables:
+            from app.models.models import DpoContactMessage
+
+            DpoContactMessage.__table__.create(bind=conn, checkfirst=True)
+            existing_tables.add("dpo_contatos")
+            print("[db] Created missing table dpo_contatos")
+        else:
+            columns = table_columns.get("dpo_contatos")
+            if columns is None:
+                columns = {col["name"] for col in inspector.get_columns("dpo_contatos")}
+                table_columns["dpo_contatos"] = columns
+            if "resposta" not in columns:
+                conn.execute(text("ALTER TABLE dpo_contatos ADD COLUMN resposta TEXT NULL"))
+                columns.add("resposta")
+                print("[db] Added missing column dpo_contatos.resposta")
 
 
 def get_db():

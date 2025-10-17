@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_TTL_HOURS: int = 2
     PASSWORD_RESET_DEV_ECHO_TOKEN: bool = False
 
+    # DPO / encarregado de dados
+    DPO_NAME: str = "Encarregado de Protecao de Dados"
+    DPO_EMAIL: EmailStr = Field(default="dpo@example.com")
+    DPO_PHONE: Optional[str] = None
+    DPO_ADDITIONAL_CONTACT: Optional[str] = None
+    DPO_WORKING_HOURS: str = "Segunda a sexta-feira, das 9h as 18h (horario de Brasilia)"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
