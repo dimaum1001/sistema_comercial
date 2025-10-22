@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiX } from "react-icons/fi";
+import { FiX, FiCreditCard } from "react-icons/fi";
 import api from "../services/api";
+
+import { Page, Card } from "../components/ui";
+import { classNames } from "../utils/classNames";
 
 // Utilidades
 const hojeISO = () => new Date().toISOString().slice(0, 10);
@@ -529,341 +532,345 @@ export default function ContasPagar() {
     );
   };
 
-  return (
-    <div className="max-w-6xl mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">Contas a Pagar</h2>
+  const messageTone =
+    msg?.tipo === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : msg?.tipo === "erro"
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : "border-blue-200 bg-blue-50 text-blue-700";
 
+  return (
+    <Page
+      title="Contas a Pagar"
+      subtitle="Controle despesas, filtre por periodo e acompanhe pagamentos."
+      icon={<FiCreditCard className="h-5 w-5" />}
+    >
       {msg.texto && (
-        <div
-          className={`mb-3 rounded px-3 py-2 text-sm ${
-            msg.tipo === "ok" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-          }`}
-        >
+        <Card className={classNames('text-sm', messageTone)}>
           {msg.texto}
-        </div>
+        </Card>
       )}
 
-      {/* Resumos */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-        <div className="bg-white border rounded p-3">
-          <div className="text-xs text-gray-500">Total no periodo</div>
-          <div className="text-lg font-semibold">{fmtBRL(totalPeriodo)}</div>
+      <div className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <Card padding="p-4">
+            <div className="text-xs text-gray-500">Total no periodo</div>
+            <div className="text-lg font-semibold">{fmtBRL(totalPeriodo)}</div>
+          </Card>
+          <Card padding="p-4">
+            <div className="text-xs text-gray-500">Pendente</div>
+            <div className="text-lg font-semibold">{fmtBRL(totalPendente)}</div>
+          </Card>
+          <Card padding="p-4">
+            <div className="text-xs text-gray-500">Vencido</div>
+            <div className="text-lg font-semibold text-red-600">{fmtBRL(totalVencido)}</div>
+          </Card>
         </div>
-        <div className="bg-white border rounded p-3">
-          <div className="text-xs text-gray-500">Pendente</div>
-          <div className="text-lg font-semibold">{fmtBRL(totalPendente)}</div>
-        </div>
-        <div className="bg-white border rounded p-3">
-          <div className="text-xs text-gray-500">Vencido</div>
-          <div className="text-lg font-semibold text-red-600">{fmtBRL(totalVencido)}</div>
-        </div>
-      </div>
 
-      {/* Filtros */}
-      <div className="bg-white border rounded p-3 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Status</label>
-            <select
-              className="w-full p-2 border rounded text-sm"
-              value={filtroStatus}
-              onChange={(e) => setFiltroStatus(e.target.value)}
-            >
-              <option value="todas">Todas</option>
-              <option value="pendente">Pendente</option>
-              <option value="paga">Paga</option>
-            </select>
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs text-gray-600 mb-1">Fornecedor</label>
-            <FornecedorSearchBox
-              placeholder="Buscar ou selecionar fornecedor"
-              initialValue={fornecedorFiltroNome}
-              minLen={1}
-              clearOnSelect={false}
-              onSelect={(item) => {
-                if (item) {
-                  setFornecedorFiltro(item.id);
-                  setFornecedorFiltroNome(formatFornecedorLabel(item));
-                  upsertFornecedor(item);
-                } else {
+        <Card padding="p-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Status</label>
+              <select
+                className="w-full p-2 border rounded text-sm"
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value)}
+              >
+                <option value="todas">Todas</option>
+                <option value="pendente">Pendente</option>
+                <option value="paga">Paga</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs text-gray-600 mb-1">Fornecedor</label>
+              <FornecedorSearchBox
+                placeholder="Buscar ou selecionar fornecedor"
+                initialValue={fornecedorFiltroNome}
+                minLen={1}
+                clearOnSelect={false}
+                onSelect={(item) => {
+                  if (item) {
+                    setFornecedorFiltro(item.id);
+                    setFornecedorFiltroNome(formatFornecedorLabel(item));
+                    upsertFornecedor(item);
+                  } else {
+                    setFornecedorFiltro('');
+                    setFornecedorFiltroNome('');
+                  }
+                }}
+                onClear={() => {
                   setFornecedorFiltro('');
                   setFornecedorFiltroNome('');
-                }
-              }}
-              onClear={() => {
-                setFornecedorFiltro('');
-                setFornecedorFiltroNome('');
-              }}
-            />
+                }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Inicio</label>
+              <input
+                type="date"
+                className="w-full p-2 border rounded text-sm"
+                value={periodo.inicio}
+                onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Fim</label>
+              <input
+                type="date"
+                className="w-full p-2 border rounded text-sm"
+                value={periodo.fim}
+                onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))}
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Inicio</label>
-            <input
-              type="date"
-              className="w-full p-2 border rounded text-sm"
-              value={periodo.inicio}
-              onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Fim</label>
-            <input
-              type="date"
-              className="w-full p-2 border rounded text-sm"
-              value={periodo.fim}
-              onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))}
-            />
-          </div>
-        </div>
-      </div>
+        </Card>
 
-      {/* Nova Conta */}
-      <div className="bg-white border rounded p-3 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
-          <div className="md:col-span-2">
-            <label className="block text-xs text-gray-600 mb-1">Fornecedor</label>
-            <FornecedorSearchBox
-              placeholder="Buscar fornecedor (opcional)"
-              initialValue={novaConta.fornecedorNome}
-              minLen={1}
-              clearOnSelect={false}
-              onSelect={(item) => {
-                if (item) {
-                  setNovaConta((s) => ({ ...s, fornecedorId: item.id, fornecedorNome: formatFornecedorLabel(item) }));
-                  upsertFornecedor(item);
-                } else {
-                  setNovaConta((s) => ({ ...s, fornecedorId: '', fornecedorNome: '' }));
-                }
-              }}
-              onClear={() => setNovaConta((s) => ({ ...s, fornecedorId: '', fornecedorNome: '' }))}
-            />
-            <p className="mt-1 text-xs text-gray-500">Deixe vazio para conta avulsa.</p>
+        <Card padding="p-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-5 items-end">
+            <div className="md:col-span-2">
+              <label className="block text-xs text-gray-600 mb-1">Fornecedor</label>
+              <FornecedorSearchBox
+                placeholder="Buscar fornecedor (opcional)"
+                initialValue={novaConta.fornecedorNome}
+                minLen={1}
+                clearOnSelect={false}
+                onSelect={(item) => {
+                  if (item) {
+                    setNovaConta((s) => ({ ...s, fornecedorId: item.id, fornecedorNome: formatFornecedorLabel(item) }));
+                    upsertFornecedor(item);
+                  } else {
+                    setNovaConta((s) => ({ ...s, fornecedorId: '', fornecedorNome: '' }));
+                  }
+                }}
+                onClear={() => setNovaConta((s) => ({ ...s, fornecedorId: '', fornecedorNome: '' }))}
+              />
+              <p className="mt-1 text-xs text-gray-500">Deixe vazio para conta avulsa.</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
+              <input
+                type="text"
+                name="valor"
+                value={novaConta.valor}
+                onChange={handleChange}
+                placeholder="0,00"
+                className="w-full p-2 border rounded text-sm text-right"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Vencimento</label>
+              <input
+                type="date"
+                name="dataVencimento"
+                value={novaConta.dataVencimento}
+                onChange={handleChange}
+                className="w-full p-2 border rounded text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Descricao</label>
+              <input
+                type="text"
+                name="descricao"
+                value={novaConta.descricao}
+                onChange={handleChange}
+                placeholder="Ex.: Energia, Internet..."
+                className="w-full p-2 border rounded text-sm"
+              />
+            </div>
+            <div className="md:col-span-5 flex justify-end">
+              <button onClick={criarConta} className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+                Criar conta
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
-            <input
-              type="text"
-              name="valor"
-              value={novaConta.valor}
-              onChange={handleChange}
-              placeholder="0,00"
-              className="w-full p-2 border rounded text-sm text-right"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Vencimento</label>
-            <input
-              type="date"
-              name="dataVencimento"
-              value={novaConta.dataVencimento}
-              onChange={handleChange}
-              className="w-full p-2 border rounded text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Descricao</label>
-            <input
-              type="text"
-              name="descricao"
-              value={novaConta.descricao}
-              onChange={handleChange}
-              placeholder="Ex.: Energia, Internet..."
-              className="w-full p-2 border rounded text-sm"
-            />
-          </div>
-          <div className="md:col-span-5 flex justify-end">
-            <button
-              onClick={criarConta}
-              className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-            >
-              Criar conta
-            </button>
-          </div>
-        </div>
-      </div>
+        </Card>
 
-      {/* Tabela */}
-      <div className="bg-white border rounded overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-3 py-2 text-left">Vencimento</th>
-              <th className="px-3 py-2 text-left">Fornecedor</th>
-              <th className="px-3 py-2 text-left">Descricao</th>
-              <th className="px-3 py-2 text-right">Valor</th>
-              <th className="px-3 py-2 text-left">Status</th>
-              <th className="px-3 py-2 text-left">Pagamento</th>
-              <th className="px-3 py-2 text-right">Acoes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {contasPaginadas.map((c) => {
-              const vencida = isVencida(c);
-              if (editando?.id === c.id) {
-                return (
-                  <tr key={c.id} className={vencida ? "bg-red-50" : ""}>
-                    <td className="px-3 py-2">
-                      <input
-                        type="date"
-                        value={editando.data_vencimento?.slice(0, 10) || ""}
-                        onChange={(e) =>
-                          setEditando((s) => ({ ...s, data_vencimento: e.target.value }))
-                        }
-                        className="p-1 border rounded text-sm"
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <FornecedorSearchBox
-                        placeholder="Buscar fornecedor"
-                        initialValue={editando.fornecedor_nome || nomeFornecedor(editando.fornecedor_id)}
-                        minLen={1}
-                        clearOnSelect={false}
-                        onSelect={(item) => {
-                          if (item) {
-                            setEditando((s) => ({ ...s, fornecedor_id: item.id, fornecedor_nome: formatFornecedorLabel(item) }));
-                            upsertFornecedor(item);
-                          } else {
-                            setEditando((s) => ({ ...s, fornecedor_id: '', fornecedor_nome: '' }));
-                          }
-                        }}
-                        onClear={() => setEditando((s) => ({ ...s, fornecedor_id: '', fornecedor_nome: '' }))}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        className="p-1 border rounded w-full text-sm"
-                        value={editando.descricao || ""}
-                        onChange={(e) =>
-                          setEditando((s) => ({ ...s, descricao: e.target.value }))
-                        }
-                      />
-                    </td>
-
-                    <td className="px-3 py-2 text-right">
-                      <input
-                        type="text"
-                        className="p-1 border rounded text-right text-sm"
-                        value={String(editando.valor)}
-                        onChange={(e) => setEditando((s) => ({ ...s, valor: e.target.value }))}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <StatusBadge status={editando.status} />
-                    </td>
-                    <td className="px-3 py-2">
-                      {editando.data_pagamento
-                        ? new Date(editando.data_pagamento).toLocaleDateString("pt-BR")
-                        : ""}
-                    </td>
-                    <td className="px-3 py-2 text-right space-x-2">
-                      <button
-                        onClick={salvarEdicao}
-                        className="px-2 py-1 text-xs bg-green-600 text-white rounded"
-                      >
-                        Salvar
-                      </button>
-                      <button
-                        onClick={() => setEditando(null)}
-                        className="px-2 py-1 text-xs bg-gray-300 rounded"
-                      >
-                        Cancelar
-                      </button>
+        <Card padding="p-0">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left">Vencimento</th>
+                  <th className="px-3 py-2 text-left">Fornecedor</th>
+                  <th className="px-3 py-2 text-left">Descricao</th>
+                  <th className="px-3 py-2 text-right">Valor</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">Pagamento</th>
+                  <th className="px-3 py-2 text-right">Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contasPaginadas.map((c) => {
+                  const vencida = isVencida(c);
+                  if (editando?.id === c.id) {
+                    return (
+                      <tr key={c.id} className={vencida ? 'bg-red-50' : ''}>
+                        <td className="px-3 py-2">
+                          <input
+                            type="date"
+                            value={editando.data_vencimento?.slice(0, 10) || ''}
+                            onChange={(e) =>
+                              setEditando((s) => ({ ...s, data_vencimento: e.target.value }))
+                            }
+                            className="p-1 border rounded text-sm"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <FornecedorSearchBox
+                            placeholder="Buscar fornecedor"
+                            initialValue={editando.fornecedor_nome || nomeFornecedor(editando.fornecedor_id)}
+                            minLen={1}
+                            clearOnSelect={false}
+                            onSelect={(item) => {
+                              if (item) {
+                                setEditando((s) => ({ ...s, fornecedor_id: item.id, fornecedor_nome: formatFornecedorLabel(item) }));
+                                upsertFornecedor(item);
+                              } else {
+                                setEditando((s) => ({ ...s, fornecedor_id: '', fornecedor_nome: '' }));
+                              }
+                            }}
+                            onClear={() => setEditando((s) => ({ ...s, fornecedor_id: '', fornecedor_nome: '' }))}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
+                            className="p-1 border rounded w-full text-sm"
+                            value={editando.descricao || ''}
+                            onChange={(e) =>
+                              setEditando((s) => ({ ...s, descricao: e.target.value }))
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
+                            className="p-1 border rounded w-full text-sm text-right"
+                            value={editando.valor}
+                            onChange={(e) =>
+                              setEditando((s) => ({ ...s, valor: e.target.value }))
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
+                            className="p-1 border rounded text-sm"
+                            value={editando.status || 'pendente'}
+                            onChange={(e) =>
+                              setEditando((s) => ({ ...s, status: e.target.value }))
+                            }
+                          >
+                            <option value="pendente">Pendente</option>
+                            <option value="paga">Paga</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="date"
+                            className="p-1 border rounded text-sm"
+                            value={editando.data_pagamento?.slice(0, 10) || ''}
+                            onChange={(e) =>
+                              setEditando((s) => ({ ...s, data_pagamento: e.target.value }))
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right space-x-2">
+                          <button onClick={salvarEdicao} className="px-2 py-1 text-xs bg-blue-600 text-white rounded">Salvar</button>
+                          <button onClick={() => setEditando(null)} className="px-2 py-1 text-xs bg-gray-300 rounded">Cancelar</button>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={c.id} className={vencida ? 'bg-red-50' : ''}>
+                      <td className="px-3 py-2">{formatarDataBR(c.data_vencimento)}</td>
+                      <td className="px-3 py-2">{nomeFornecedor(c.fornecedor_id) || 'Conta avulsa'}</td>
+                      <td className="px-3 py-2">{c.descricao || ''}</td>
+                      <td className="px-3 py-2 text-right">{fmtBRL(c.valor)}</td>
+                      <td className="px-3 py-2">
+                        <StatusBadge status={c.status} />
+                      </td>
+                      <td className="px-3 py-2">
+                        {c.data_pagamento ? new Date(c.data_pagamento).toLocaleDateString('pt-BR') : ''}
+                      </td>
+                      <td className="px-3 py-2 text-right space-x-2">
+                        {c.status !== 'paga' && (
+                          <button
+                            onClick={() => marcarComoPaga(c.id)}
+                            className="px-2 py-1 text-xs bg-green-600 text-white rounded"
+                          >
+                            Marcar como paga
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setEditando({ ...c, fornecedor_nome: nomeFornecedor(c.fornecedor_id) })}
+                          className="px-2 py-1 text-xs bg-blue-600 text-white rounded"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => excluirConta(c.id)}
+                          className="px-2 py-1 text-xs bg-red-600 text-white rounded"
+                        >
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {contasFiltradas.length === 0 && (
+                  <tr>
+                    <td className="px-3 py-6 text-center text-gray-500" colSpan={7}>
+                      Nenhuma conta encontrada com os filtros atuais.
                     </td>
                   </tr>
-                );
-              }
-              return (
-                <tr key={c.id} className={vencida ? "bg-red-50" : ""}>
-                  <td className="px-3 py-2">
-                    {formatarDataBR(c.data_vencimento)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {nomeFornecedor(c.fornecedor_id) || "Conta avulsa"}
-                  </td>
-                  <td className="px-3 py-2">
-                    {c.descricao || ""}
-                  </td>
-                  <td className="px-3 py-2 text-right">{fmtBRL(c.valor)}</td>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={c.status} />
-                  </td>
-                  <td className="px-3 py-2">
-                    {c.data_pagamento
-                      ? new Date(c.data_pagamento).toLocaleDateString("pt-BR")
-                      : ""}
-                  </td>
-                  <td className="px-3 py-2 text-right space-x-2">
-                    {c.status !== "paga" && (
-                      <button
-                        onClick={() => marcarComoPaga(c.id)}
-                        className="px-2 py-1 text-xs bg-green-600 text-white rounded"
-                      >
-                        Marcar como paga
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setEditando({ ...c, fornecedor_nome: nomeFornecedor(c.fornecedor_id) })}
-                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => excluirConta(c.id)}
-                      className="px-2 py-1 text-xs bg-red-600 text-white rounded"
-                    >
-                      Excluir
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-            {contasFiltradas.length === 0 && (
-              <tr>
-                <td className="px-3 py-6 text-center text-gray-500" colSpan={6}>
-                  Nenhuma conta encontrada com os filtros atuais.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
-      <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white border rounded px-3 py-2">
-        <div className="text-sm text-gray-600">
-          Pagina <span className="font-medium">{tabelaPage}</span> mostrando <span className="font-medium">{contasPaginadas.length}</span> de <span className="font-medium">{contasFiltradas.length}</span> contas ({tabelaPageSize} por pagina)
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-600" htmlFor="contas-page-size">Por pagina</label>
-          <select
-            id="contas-page-size"
-            value={tabelaPageSize}
-            onChange={handleTabelaPageSizeChange}
-            className="border rounded text-sm px-2 py-1"
-          >
-            {[10, 25, 50, 100].map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={handleTabelaPrev}
-            disabled={tabelaPage === 1}
-            className={`px-3 py-1 rounded-md ${tabelaPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'}`}
-          >
-            Anterior
-          </button>
-          <button
-            onClick={handleTabelaNext}
-            disabled={tabelaPage >= totalPaginas}
-            className={`px-3 py-1 rounded-md ${tabelaPage >= totalPaginas ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 transition'}`}
-          >
-            Proxima
-          </button>
-        </div>
+        <Card padding="px-3 py-2">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-gray-600">
+              Pagina <span className="font-medium">{tabelaPage}</span> mostrando{' '}
+              <span className="font-medium">{contasPaginadas.length}</span> de{' '}
+              <span className="font-medium">{contasFiltradas.length}</span> contas ({tabelaPageSize} por pagina)
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-600" htmlFor="contas-page-size">Por pagina</label>
+              <select
+                id="contas-page-size"
+                value={tabelaPageSize}
+                onChange={handleTabelaPageSizeChange}
+                className="border rounded text-sm px-2 py-1"
+              >
+                {[10, 25, 50, 100].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleTabelaPrev}
+                disabled={tabelaPage === 1}
+                className={`px-3 py-1 rounded-md ${tabelaPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'}`}
+              >
+                Anterior
+              </button>
+              <button
+                onClick={handleTabelaNext}
+                disabled={tabelaPage >= totalPaginas}
+                className={`px-3 py-1 rounded-md ${tabelaPage >= totalPaginas ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 transition'}`}
+              >
+                Proxima
+              </button>
+            </div>
+          </div>
+        </Card>
       </div>
-    </div>
+    </Page>
   );
+
 }

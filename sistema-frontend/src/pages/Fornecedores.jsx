@@ -1,333 +1,317 @@
-import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import api from '../services/api'
-import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch } from 'react-icons/fi'
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
+import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch, FiTruck } from 'react-icons/fi';
+import { Page, EmptyState, Card } from '../components/ui';
 
 function useDebounced(value, delay = 300) {
-  const [currentValue, setCurrentValue] = useState(value)
+  const [currentValue, setCurrentValue] = useState(value);
 
   useEffect(() => {
-    const timer = setTimeout(() => setCurrentValue(value), delay)
-    return () => clearTimeout(timer)
-  }, [value, delay])
+    const timer = setTimeout(() => setCurrentValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
 
-  return currentValue
+  return currentValue;
 }
 
-function formatarCnpjCpf(valor) {
-  if (!valor) return 'Nao informado'
-  const str = String(valor)
-  if (str.includes('*')) return str
-  const digits = str.replace(/[^0-9]/g, '')
-  if (digits.length === 11) {
-    return `***.***.***-${digits.slice(-2)}`
-  }
-  if (digits.length === 14) {
-    return `**.***.***/****-${digits.slice(-2)}`
-  }
+function formatarDocumento(valor) {
+  if (!valor) return 'Nao informado';
+  const digits = String(valor).replace(/[^0-9]/g, '');
+  if (digits.length === 11) return `***.***.***-${digits.slice(-2)}`;
+  if (digits.length === 14) return `**.***.***/****-${digits.slice(-2)}`;
   if (digits.length > 4) {
-    const masked = '*'.repeat(digits.length - 4)
-    return `${masked}${digits.slice(-4)}`
+    const masked = '*'.repeat(digits.length - 4);
+    return `${masked}${digits.slice(-4)}`;
   }
-  return '*'.repeat(Math.max(0, digits.length - 1)) + digits.slice(-1)
+  return '*'.repeat(Math.max(0, digits.length - 1)) + digits.slice(-1);
 }
 
 function formatarTelefone(valor) {
-  if (!valor) return 'Nao informado'
-  const str = String(valor)
-  if (str.includes('*')) return str
-  const n = str.replace(/\D/g, '')
-  if (n.length === 10) return n.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
-  if (n.length === 11) return n.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
-  return valor
-}
-
-const TOTAL_HEADER_KEYS = ['x-total-count', 'x-total', 'x-count', 'x-total-items', 'x-items-count']
-
-function parseTotalFromHeaders(headers = {}) {
-  for (const key of TOTAL_HEADER_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(headers, key)) {
-      const value = headers[key]
-      const numero = Number(value)
-      if (!Number.isNaN(numero)) {
-        return numero
-      }
-    }
-  }
-  const contentRange = headers['content-range']
-  if (typeof contentRange === 'string' && contentRange.includes('/')) {
-    const total = Number(contentRange.split('/').pop())
-    if (!Number.isNaN(total)) {
-      return total
-    }
-  }
-  return null
+  if (!valor) return 'Nao informado';
+  const n = String(valor).replace(/\D/g, '');
+  if (n.length === 10) return n.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+  if (n.length === 11) return n.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  if (n.length === 8) return n.replace(/(\d{4})(\d{4})/, '$1-$2');
+  return n;
 }
 
 export default function Fornecedores() {
-  const [fornecedores, setFornecedores] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const debouncedSearch = useDebounced(searchTerm, 400)
+  const [fornecedores, setFornecedores] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(null);
+  const [message, setMessage] = useState('');
+  const debouncedSearch = useDebounced(searchTerm, 400);
 
-  const [pageSize, setPageSize] = useState(10)
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(false)
-  const [totalCount, setTotalCount] = useState(null)
+  const navigate = useNavigate();
 
-  const navigate = useNavigate()
-
-  const fetchTotalFallback = useCallback(async (query) => {
-    try {
-      const termo = (query || '').trim()
-      const params = termo
-        ? { q: termo, search: termo, term: termo, nome: termo }
-        : {}
-      const response = await api.get('/fornecedores/count', { params })
-      const data = response?.data
-      const total =
-        typeof data === 'number'
-          ? data
-          : typeof data?.total === 'number'
-          ? data.total
-          : typeof data?.count === 'number'
-          ? data.count
-          : null
-      if (total != null) {
-        setTotalCount(total)
-      }
-    } catch (error) {
-      console.error('Erro ao obter total de fornecedores (fallback):', error)
-      setTotalCount(null)
-    }
-  }, [])
   const fetchFornecedores = useCallback(async () => {
-    const token = localStorage.getItem('token')
-
+    const token = localStorage.getItem('token');
     if (!token) {
-      navigate('/login')
-      return
+      navigate('/login');
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const offset = (page - 1) * pageSize
-      const limitPlusOne = pageSize + 1
+      const offset = (page - 1) * pageSize;
+      const limitPlusOne = pageSize + 1;
+      const params = {
+        offset,
+        limit: limitPlusOne,
+      };
+      const term = debouncedSearch.trim();
+      if (term) {
+        params.q = term;
+        params.search = term;
+        params.term = term;
+        params.nome = term;
+      }
 
       const response = await api.get('/fornecedores', {
         headers: { Authorization: `Bearer ${token}` },
-        params: {
-          offset,
-          limit: limitPlusOne,
-          q: debouncedSearch || undefined,
-          search: debouncedSearch || undefined,
-          term: debouncedSearch || undefined,
-          nome: debouncedSearch || undefined,
-        },
-      })
+        params,
+      });
 
-      const lista = Array.isArray(response.data) ? response.data : response.data?.items || []
-      if (lista.length > pageSize) {
-        setHasMore(true)
-        setFornecedores(lista.slice(0, pageSize))
+      const data = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response?.data?.items)
+        ? response.data.items
+        : [];
+
+      if (data.length > pageSize) {
+        setHasMore(true);
+        setFornecedores(data.slice(0, pageSize));
       } else {
-        setHasMore(false)
-        setFornecedores(lista)
+        setHasMore(false);
+        setFornecedores(data);
       }
 
-      const totalFromHeaders = parseTotalFromHeaders(response.headers || {})
-      if (totalFromHeaders != null) {
-        setTotalCount(totalFromHeaders)
-      } else {
-        await fetchTotalFallback(debouncedSearch)
-      }
+      const total =
+        Number(response?.headers?.['x-total-count']) ??
+        Number(response?.headers?.['x-items-count']) ??
+        Number(response?.headers?.['x-total']) ??
+        (typeof response?.data?.total === 'number' ? response.data.total : null);
+
+      setTotalCount(typeof total === 'number' ? total : null);
+      setMessage('');
     } catch (err) {
-      console.error('Erro ao buscar fornecedores:', err)
-      setHasMore(false)
-      setFornecedores([])
-      setTotalCount(null)
+      console.error('Erro ao buscar fornecedores:', err);
+      setMessage('Nao foi possivel carregar os fornecedores.');
+      setHasMore(false);
+      setFornecedores([]);
+      setTotalCount(null);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [debouncedSearch, fetchTotalFallback, navigate, page, pageSize])
+  }, [debouncedSearch, navigate, page, pageSize]);
 
   useEffect(() => {
-    fetchFornecedores()
-  }, [fetchFornecedores])
+    fetchFornecedores();
+  }, [fetchFornecedores]);
 
-  const filteredFornecedores = fornecedores.filter((fornecedor) => {
-    const termo = searchTerm.toLowerCase()
-    const nome = (fornecedor.nome || fornecedor.razao_social || '').toLowerCase()
-    const cnpj = (fornecedor.cnpj_cpf || '').toLowerCase()
-    const email = (fornecedor.email || '').toLowerCase()
-    const telefone = (fornecedor.telefone || '').toLowerCase()
-    return nome.includes(termo) || cnpj.includes(termo) || email.includes(termo) || telefone.includes(termo)
-  })
+  useEffect(() => {
+    setPage((prev) => (prev === 1 ? prev : 1));
+  }, [debouncedSearch]);
 
   const handleDelete = async (id) => {
-    if (window.confirm('Tem certeza que deseja excluir este fornecedor?')) {
-      try {
-        const token = localStorage.getItem('token')
-        await api.delete(`/fornecedores/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        fetchFornecedores()
-      } catch (err) {
-        console.error('Erro ao excluir fornecedor:', err)
-      }
+    if (!window.confirm('Tem certeza que deseja excluir este fornecedor?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      await api.delete(`/fornecedores/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      fetchFornecedores();
+    } catch (err) {
+      console.error('Erro ao excluir fornecedor:', err);
+      setMessage('Nao foi possivel excluir o fornecedor.');
     }
-  }
+  };
 
   const handlePrev = () => {
-    if (page > 1) setPage((p) => p - 1)
-  }
+    if (page > 1) setPage((prev) => prev - 1);
+  };
 
   const handleNext = () => {
-    if (hasMore) setPage((p) => p + 1)
-  }
+    if (hasMore) setPage((prev) => prev + 1);
+  };
 
-  const handlePageSizeChange = (e) => {
-    const newSize = Number(e.target.value)
-    setPageSize(newSize)
-    setPage(1)
-  }
+  const handlePageSizeChange = (event) => {
+    const newSize = Number(event.target.value) || 10;
+    setPageSize(newSize);
+    setPage(1);
+  };
+
+  const headerActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+        <span>Mostrar</span>
+        <select value={pageSize} onChange={handlePageSizeChange} className="select h-9 w-24">
+          {[10, 25, 50, 100].map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <span>por pagina</span>
+      </div>
+      <button type="button" onClick={() => navigate('/dashboard')} className="btn-secondary">
+        <FiArrowLeft className="h-4 w-4" />
+        Voltar
+      </button>
+      <button type="button" onClick={() => navigate('/fornecedores/cadastrar')} className="btn-primary">
+        <FiUserPlus className="h-4 w-4" />
+        Novo fornecedor
+      </button>
+    </div>
+  );
+
+  const filteredFornecedores = useMemo(() => {
+    if (!debouncedSearch) return fornecedores;
+    const term = debouncedSearch.toLowerCase();
+    return fornecedores.filter((fornecedor) => {
+      const nome = (fornecedor.nome || fornecedor.razao_social || '').toLowerCase();
+      const documento = (fornecedor.cnpj_cpf || '').toLowerCase();
+      const email = (fornecedor.email || '').toLowerCase();
+      const telefone = (fornecedor.telefone || '').toLowerCase();
+      return (
+        nome.includes(term) ||
+        documento.includes(term) ||
+        email.includes(term) ||
+        telefone.includes(term)
+      );
+    });
+  }, [debouncedSearch, fornecedores]);
+
+  const rangeStart = (page - 1) * pageSize + 1;
+  const rangeEnd = rangeStart + filteredFornecedores.length - 1;
+  const totalDisplay = typeof totalCount === 'number' ? totalCount : fornecedores.length;
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="h-12 w-12 bg-blue-200 rounded-full mb-4"></div>
-          <div className="h-4 w-32 bg-blue-200 rounded"></div>
+      <Page
+        title="Fornecedores"
+        subtitle="Gerencie fornecedores e mantenha os dados atualizados."
+        icon={<FiTruck className="h-5 w-5" />}
+        actions={headerActions}
+      >
+        <div className="flex min-h-[320px] items-center justify-center rounded-3xl border border-blue-100 bg-white/80 shadow-sm">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-12 w-12 animate-pulse rounded-full bg-blue-200" />
+            <div className="h-4 w-32 animate-pulse rounded-full bg-blue-200" />
+          </div>
         </div>
-      </div>
-    )
+      </Page>
+    );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-3">
-        <h2 className="text-2xl font-bold text-gray-800">Fornecedores Cadastrados</h2>
+    <Page
+      title="Fornecedores"
+      subtitle="Gerencie fornecedores e mantenha os dados atualizados."
+      icon={<FiTruck className="h-5 w-5" />}
+      actions={headerActions}
+    >
+      {message && (
+        <Card className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{message}</Card>
+      )}
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Mostrar</label>
-            <select
-              value={pageSize}
-              onChange={handlePageSizeChange}
-              className="border border-gray-300 rounded-md text-sm px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
-            <span className="text-sm text-gray-600">por pagina</span>
-          </div>
-
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
-          >
-            <FiArrowLeft className="mr-2" />
-            Voltar
-          </button>
-          <button
-            onClick={() => navigate('/fornecedores/cadastrar')}
-            className="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-          >
-            <FiUserPlus className="mr-2" />
-            Novo Fornecedor
-          </button>
+      <Card className="p-4 sm:p-6">
+        <div className="relative">
+          <FiSearch className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Pesquise por nome, CNPJ/CPF, e-mail ou telefone"
+            className="input pl-12"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
         </div>
-      </div>
-
-      <div className="mb-6 relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <FiSearch className="text-gray-400" />
-        </div>
-        <input
-          type="text"
-          placeholder="Pesquisar fornecedores por nome, CNPJ/CPF, e-mail ou telefone..."
-          className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          value={searchTerm}
-          onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-        />
-      </div>
+      </Card>
 
       {filteredFornecedores.length === 0 ? (
-        <div className="bg-white p-8 rounded-xl shadow-sm text-center">
-          <p className="text-gray-600 mb-4">
-            {searchTerm ? 'Nenhum fornecedor encontrado para a pesquisa nesta pagina.' : 'Nenhum fornecedor nesta pagina.'}
-          </p>
-          <button
-            onClick={() => navigate('/fornecedores/cadastrar')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-          >
-            Cadastrar Primeiro Fornecedor
-          </button>
-        </div>
+        <EmptyState
+          title={debouncedSearch ? 'Nenhum fornecedor encontrado' : 'Nenhum fornecedor cadastrado'}
+          description={
+            debouncedSearch
+              ? 'Ajuste os filtros ou tente outro termo de busca.'
+              : 'Cadastre o primeiro fornecedor para organizar sua base de parceiros.'
+          }
+          actions={
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => navigate('/fornecedores/cadastrar')}
+            >
+              <FiUserPlus className="h-4 w-4" />
+              Cadastrar fornecedor
+            </button>
+          }
+        />
       ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="table-shell">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nome / Razao Social
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Nome / Razao social
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     CNPJ/CPF
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Telefone
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Data Cadastro
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Data cadastro
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Acoes
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {filteredFornecedores.map((fornecedor) => {
-                  const nomeOuRazao = fornecedor.nome || fornecedor.razao_social || '-'
+                  const nome = fornecedor.nome || fornecedor.razao_social || '-';
                   return (
-                    <tr key={fornecedor.id} className="hover:bg-gray-50 transition">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-blue-600 font-medium">
-                              {(nomeOuRazao.charAt(0) || '?').toUpperCase()}
-                            </span>
+                    <tr key={fornecedor.id} className="transition hover:bg-slate-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-600">
+                            {(nome.charAt(0) || '?').toUpperCase()}
                           </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{nomeOuRazao}</div>
-                            <div className="text-sm text-gray-500">{fornecedor.email || 'Sem e-mail'}</div>
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900">{nome}</div>
+                            <div className="text-sm text-slate-500">{fornecedor.email || 'Sem email'}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatarCnpjCpf(fornecedor.cnpj_cpf)}
+                      <td className="px-6 py-4 text-sm text-slate-600">{formatarDocumento(fornecedor.cnpj_cpf)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{formatarTelefone(fornecedor.telefone)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {fornecedor.criado_em
+                          ? new Date(fornecedor.criado_em).toLocaleDateString('pt-BR')
+                          : '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatarTelefone(fornecedor.telefone)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {fornecedor.criado_em ? new Date(fornecedor.criado_em).toLocaleDateString('pt-BR') : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2">
                           <button
+                            type="button"
                             onClick={() => navigate(`/fornecedores/editar/${fornecedor.id}`)}
-                            className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50 transition"
+                            className="btn-ghost h-9 w-9 rounded-full p-0 text-blue-600 hover:text-blue-700"
                             title="Editar"
                           >
                             <FiEdit />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDelete(fornecedor.id)}
-                            className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50 transition"
+                            className="btn-ghost h-9 w-9 rounded-full p-0 text-rose-600 hover:text-rose-700"
                             title="Excluir"
                           >
                             <FiTrash2 />
@@ -335,7 +319,7 @@ export default function Fornecedores() {
                         </div>
                       </td>
                     </tr>
-                  )
+                  );
                 })}
               </tbody>
             </table>
@@ -343,41 +327,44 @@ export default function Fornecedores() {
         </div>
       )}
 
-      <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white px-6 py-3 rounded-b-xl shadow-sm">
-        <div className="text-sm text-gray-500">
-          Pagina <span className="font-medium">{page}</span> mostrando{' '}
-          <span className="font-medium">{filteredFornecedores.length}</span> de{' '}
-          <span className="font-medium">{fornecedores.length}</span> registros carregados ({pageSize} por pagina)
-          {' | '}
-          <span className="font-medium">
+      <Card className="flex flex-col gap-3 px-4 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          Pagina <span className="font-semibold text-slate-900">{page}</span>{' '}
+          {filteredFornecedores.length > 0 ? (
+            <>
+              mostrando{' '}
+              <span className="font-semibold text-slate-900">
+                {rangeStart}-{rangeEnd}
+              </span>{' '}
+              de <span className="font-semibold text-slate-900">{totalDisplay || '--'}</span> registros
+            </>
+          ) : (
+            'sem registros na pagina atual'
+          )}{' '}
+          ({pageSize} por pagina){' '}
+          <span className="font-semibold text-slate-900">
             Total geral: {typeof totalCount === 'number' ? totalCount : '--'}
           </span>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex gap-2">
           <button
+            type="button"
             onClick={handlePrev}
             disabled={page === 1}
-            className={`px-3 py-1 rounded-md ${
-              page === 1
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'
-            }`}
+            className="btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
           >
             Anterior
           </button>
           <button
+            type="button"
             onClick={handleNext}
             disabled={!hasMore}
-            className={`px-3 py-1 rounded-md ${
-              !hasMore
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700 transition'
-            }`}
+            className="btn-primary disabled:cursor-not-allowed disabled:bg-blue-300"
           >
             Proxima
           </button>
         </div>
-      </div>
-    </div>
-  )
+      </Card>
+    </Page>
+  );
 }

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../services/api";
 import {
   FiShoppingCart,
@@ -10,6 +10,9 @@ import {
   FiUser,
   FiBox,
 } from "react-icons/fi";
+
+import { Page, Card } from "../components/ui";
+import { classNames } from "../utils/classNames";
 
 /**
  * Hooks utilitarios
@@ -29,6 +32,11 @@ function onlyDigits(s) {
 
 const HISTORICO_PAGE_SIZE = 10;
 
+const toCents = (value) => Math.round(Number(value || 0) * 100);
+const subtotalItemToCents = (item) => Math.round(item.preco_unit * item.quantidade * 100);
+const fromCents = (cents) => cents / 100;
+const formatCurrency = (cents) => fromCents(cents).toFixed(2);
+
 function formatarDataLocal(valor) {
   if (!valor) return "--";
 
@@ -36,8 +44,34 @@ function formatarDataLocal(valor) {
     if (raw instanceof Date) return raw;
     if (typeof raw === "string") {
       const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
-      const parsed = new Date(normalized);
-      if (!Number.isNaN(parsed.getTime())) return parsed;
+      const hasOffset = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
+
+      if (!hasOffset) {
+        const match = normalized.match(
+          /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/
+        );
+        if (match) {
+          const [, year, month, day, hour, minute, second = "0", fraction = "0"] = match;
+          const localDate = new Date(
+            Number(year),
+            Number(month) - 1,
+            Number(day),
+            Number(hour),
+            Number(minute),
+            Number(second),
+            Number(String(fraction).padEnd(3, "0"))
+          );
+          if (!Number.isNaN(localDate.getTime())) return localDate;
+        }
+      }
+
+      const parsedNormalized = new Date(normalized);
+      if (!Number.isNaN(parsedNormalized.getTime())) return parsedNormalized;
+
+      if (!hasOffset) {
+        const parsedUtc = new Date(`${normalized}Z`);
+        if (!Number.isNaN(parsedUtc.getTime())) return parsedUtc;
+      }
     }
     const parsed = new Date(raw);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -49,9 +83,11 @@ function formatarDataLocal(valor) {
   const formatter = new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: "America/Sao_Paulo",
   });
 
   return formatter.format(data);
@@ -516,34 +552,30 @@ export default function Vendas() {
   };
 
   // ---------- totais ----------
-  const subtotalItens = itens.reduce((sum, i) => sum + i.preco_unit * i.quantidade, 0);
-  const descontoValor = subtotalItens * (Number(descontoPerc) / 100);
-  const acrescimoValor = subtotalItens * (Number(acrescimoPerc) / 100);
-  const totalFinal = subtotalItens - descontoValor + acrescimoValor;
+  const subtotalCents = itens.reduce((sum, item) => sum + subtotalItemToCents(item), 0);
+  const descontoCents = Math.round(subtotalCents * (Number(descontoPerc) / 100));
+  const acrescimoCents = Math.round(subtotalCents * (Number(acrescimoPerc) / 100));
+  const totalFinalCents = subtotalCents - descontoCents + acrescimoCents;
 
-  const totalPagamentos = pagamentos.reduce((sum, p) => sum + Number(p.valor || 0), 0);
-  const restante = totalFinal - totalPagamentos;
 
   // Preenche o 1o pagamento com o total (ou o restante)
   useEffect(() => {
     if (!userEditouPagamentos.current) {
       setPagamentos((curr) => {
         if (curr.length === 0) {
-          return [
-            { forma_pagamento: "dinheiro", valor: totalFinal.toFixed(2), parcelas: 1, data_vencimento: hoje },
-          ];
+          return [{ forma_pagamento: "dinheiro", valor: formatCurrency(totalFinalCents), parcelas: 1, data_vencimento: hoje }];
         }
         const novo = [...curr];
-        const outros = novo.slice(1).reduce((s, p) => s + Number(p.valor || 0), 0);
+        const outrosCents = novo.slice(1).reduce((s, p) => s + toCents(p.valor), 0);
         novo[0] = {
           ...novo[0],
-          valor: Math.max(totalFinal - outros, 0).toFixed(2),
+          valor: formatCurrency(Math.max(totalFinalCents - outrosCents, 0)),
           data_vencimento: novo[0].data_vencimento || hoje,
         };
         return novo;
       });
     }
-  }, [totalFinal]); // eslint-disable-line
+  }, [totalFinalCents]); // eslint-disable-line
 
   function formatarValorParaState(v) {
     const s = String(v).replace(/[^\d.,]/g, "").replace(",", ".");
@@ -570,9 +602,12 @@ export default function Vendas() {
   function adicionarPagamento() {
     userEditouPagamentos.current = true;
     setPagamentos((prev) => {
-      const pago = prev.reduce((s, p) => s + Number(p.valor || 0), 0);
-      const faltando = Math.max(totalFinal - pago, 0);
-      return [...prev, { forma_pagamento: "dinheiro", valor: faltando.toFixed(2), parcelas: 1, data_vencimento: hoje }];
+      const pagoCents = prev.reduce((s, p) => s + toCents(p.valor), 0);
+      const faltandoCents = Math.max(totalFinalCents - pagoCents, 0);
+      return [
+        ...prev,
+        { forma_pagamento: "dinheiro", valor: formatCurrency(faltandoCents), parcelas: 1, data_vencimento: hoje },
+      ];
     });
   }
   function removerPagamento(index) {
@@ -616,469 +651,461 @@ export default function Vendas() {
       : null;
 
   // ---------- UI ----------
+  const messageTone =
+    mensagem?.tipo === "sucesso"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : mensagem?.tipo === "erro"
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : "border-blue-200 bg-blue-50 text-blue-700";
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-800 flex items-center">
-            <FiShoppingCart className="mr-2" /> Registro de Vendas
-          </h1>
-        </div>
+    <Page
+      title="Registro de Vendas"
+      subtitle="Monte pedidos, controle pagamentos e visualize o historico recente."
+      icon={<FiShoppingCart className="h-5 w-5" />}
+    >
+      {mensagem.texto && (
+        <Card className={classNames('text-sm', messageTone)}>
+          {mensagem.texto}
+        </Card>
+      )}
 
-        {mensagem.texto && (
-          <div
-            className={`mb-4 p-3 rounded-md text-sm ${
-              mensagem.tipo === "sucesso" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-            }`}
-          >
-            {mensagem.texto}
-          </div>
-        )}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <Card padding="p-4 md:p-5">
+            <h2 className="text-md font-semibold mb-4 flex items-center">
+              <FiPlus className="mr-1" /> Nova Venda
+            </h2>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Coluna principal */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow p-4 md:p-5 mb-4">
-              <h2 className="text-md font-semibold mb-4 flex items-center">
-                <FiPlus className="mr-1" /> Nova Venda
-              </h2>
+            {/* Cliente */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FiUser className="text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">Cliente</span>
+              </div>
 
-              {/* Cliente */}
-              <div className="mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <FiUser className="text-gray-500" />
-                  <span className="text-sm font-medium text-gray-700">Cliente</span>
+              {!cliente ? (
+                <AsyncSearchBox
+                  entity="clientes"
+                  placeholder="Digite 2+ letras ou o codigo do cliente..."
+                  minLen={2}
+                  formatOption={(c) =>
+                    `${c.codigo_cliente ? c.codigo_cliente + " - " : ""}${c.nome}${
+                      c.cpf_cnpj ? " (" + c.cpf_cnpj + ")" : ""
+                    }`
+                  }
+                  onSelect={(cli) => setCliente(cli)}
+                  clearOnSelect={true}
+                  rightSlot={null}
+                />
+              ) : (
+                <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-sm">
+                  <span className="text-blue-700">
+                    Cliente selecionado:{' '}
+                    <strong>{cliente.nome}</strong>
+                    {cliente.cpf_cnpj ? (
+                      <span className="text-xs ml-2 text-blue-600">({cliente.cpf_cnpj})</span>
+                    ) : null}
+                  </span>
+                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setCliente(null)}>Trocar</button>
                 </div>
+              )}
+            </div>
 
-                {!cliente ? (
-                  <AsyncSearchBox
-                    entity="clientes"
-                    placeholder="Digite 2+ letras ou o codigo do cliente..."
-                    minLen={2}
-                    formatOption={(c) =>
-                      `${c.codigo_cliente ? c.codigo_cliente + " - " : ""}${c.nome}${
-                        c.cpf_cnpj ? " (" + c.cpf_cnpj + ")" : ""
-                      }`
-                    }
-                    onSelect={(c) => setCliente(c)}
-                    clearOnSelect={true}
-                  />
-                ) : (
-                  <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                    <div className="text-sm text-gray-700">
-                      <span className="font-medium">
-                        {cliente.codigo_cliente ? `${cliente.codigo_cliente} - ` : ""}
-                        {cliente.nome}
-                      </span>
-                      {cliente.cpf_cnpj ? <span className="text-gray-500">  {cliente.cpf_cnpj}</span> : null}
-                    </div>
+            {/* Produto */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FiBox className="text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">Produto</span>
+              </div>
+
+              <AsyncSearchBox
+                entity="produtos"
+                placeholder="Digite 2+ letras do produto ou codigo..."
+                minLen={2}
+                extraParams={{ somente_ativos: true }}
+                formatOption={(p) => `${p.codigo_produto ? p.codigo_produto + " - " : ''}${p.nome}`}
+                onSelect={async (p) => {
+                  setProduto(p);
+                  setQuantidade(1);
+                  await carregarEstoque(p.id);
+                }}
+                clearOnSelect={true}
+                rightSlot={
+                  <>
+                    <input
+                      type="number"
+                      className="w-24 text-sm p-2 border border-gray-300 rounded-lg"
+                      min={permiteDecimal ? "0.001" : "1"}
+                      step={permiteDecimal ? "0.001" : "1"}
+                      value={quantidade}
+                      onChange={(e) => handleQuantidadeChange(e.target.value)}
+                      title={permiteDecimal ? "Quantidade (aceita decimais)" : "Quantidade (somente inteiros)"}
+                    />
                     <button
-                      className="text-xs text-blue-600 hover:underline"
-                      onClick={() => setCliente(null)}
+                      className="bg-blue-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-blue-700"
+                      onClick={async () => { await adicionarItemComProduto(produto); }}
                     >
+                      Adicionar
+                    </button>
+                  </>
+                }
+              />
+
+              <input
+                type="text"
+                className="mt-2 w-full text-sm p-2 border border-gray-200 rounded-lg"
+                placeholder="Ou digite/escaneie o CODIGO/CODIGO DE BARRAS e pressione Enter"
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter") {
+                    await onSubmitCodigoProduto(e.currentTarget.value);
+                    e.currentTarget.value = "";
+                  }
+                }}
+              />
+
+              {produto && (
+                <div className="mt-2 flex flex-col gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-gray-700">
+                      Selecionado:{' '}
+                      <strong>
+                        {produto.codigo_produto ? `${produto.codigo_produto} - ` : ''}
+                        {produto.nome}
+                      </strong>
+                    </div>
+                    <button className="text-xs text-blue-600 hover:underline" onClick={() => { setProduto(null); setEstoqueAtual(null); }}>
                       Trocar
                     </button>
                   </div>
-                )}
-              </div>
 
-              {/* Produto */}
-              <div className="mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <FiBox className="text-gray-500" />
-                  <span className="text-sm font-medium text-gray-700">Produto</span>
-                </div>
-
-                <AsyncSearchBox
-                  entity="produtos"
-                  placeholder="Digite 2+ letras, codigo ou escaneie o codigo de barras..."
-                  minLen={2}
-                  formatOption={(p) =>
-                    `${p.codigo_produto ? p.codigo_produto + " - " : ""}${p.nome}  R$ ${Number(
-                      p.preco_venda ?? 0
-                    ).toFixed(2)}`
-                  }
-                  onSelect={async (p) => {
-                    setProduto(p);               // seleciona produto
-                    setQuantidade(1);
-                    await carregarEstoque(p.id); // carrega saldo atual
-                  }}
-                  clearOnSelect={true}
-                  rightSlot={
-                    <>
-                      <input
-                        type="number"
-                        className="w-24 text-sm p-2 border border-gray-300 rounded-lg"
-                        min={permiteDecimal ? "0.001" : "1"}
-                        step={permiteDecimal ? "0.001" : "1"}
-                        value={quantidade}
-                        onChange={(e) => handleQuantidadeChange(e.target.value)}
-                        title={permiteDecimal ? "Quantidade (aceita decimais)" : "Quantidade (somente inteiros)"}
-                      />
-                      <button
-                        className="bg-blue-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-blue-700"
-                        onClick={async () => { await adicionarItemComProduto(produto); }}
-                      >
-                        Adicionar
-                      </button>
-                    </>
-                  }
-                />
-
-                {/* Campo rapido para codigo de barras / Enter */}
-                <input
-                  type="text"
-                  className="mt-2 w-full text-sm p-2 border border-gray-200 rounded-lg"
-                  placeholder="Ou digite/escaneie o CODIGO/CODIGO DE BARRAS e pressione Enter"
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter") {
-                      await onSubmitCodigoProduto(e.currentTarget.value);
-                      e.currentTarget.value = "";
-                    }
-                  }}
-                />
-
-                {/* Bloco de status do produto selecionado + estoque */}
-                {produto && (
-                  <div className="mt-2 flex flex-col gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-gray-700">
-                        Selecionado:{" "}
-                        <strong>
-                          {produto.codigo_produto ? `${produto.codigo_produto} - ` : ""}
-                          {produto.nome}
-                        </strong>
-                      </div>
-                      <button className="text-xs text-blue-600 hover:underline" onClick={() => { setProduto(null); setEstoqueAtual(null); }}>
-                        Trocar
-                      </button>
-                    </div>
-
-                    <div className="text-xs text-gray-700 flex items-center gap-3">
-                      {estoqueLoading ? (
-                        <span className="text-gray-500">Carregando estoque...</span>
-                      ) : typeof estoqueAtual === "number" ? (
-                        <>
-                          <span className={`px-2 py-0.5 rounded-full text-[11px] ${estoqueBadgeClass(estoqueAtual)}`}>
-                            Saldo atual: {formatQuantidade(estoqueAtual, permiteDecimal)} {unidadeSiglaAtual}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-full text-[11px] ${estoqueBadgeClass(disponivel ?? 0)}`}>
-                            Disponivel (no carrinho): {formatQuantidade(disponivel ?? 0, permiteDecimal)} {unidadeSiglaAtual}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-gray-500">Saldo nao disponivel</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Itens */}
-              {itens.length > 0 && (
-                <div className="mt-4">
-                  <h3 className="text-sm font-medium mb-2">Itens</h3>
-                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-2 py-2 text-left">Produto</th>
-                          <th className="px-2 py-2 text-center">Qtd</th>
-                          <th className="px-2 py-2 text-right">Unit</th>
-                          <th className="px-2 py-2 text-right">Subtotal</th>
-                          <th className="px-2 py-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {itens.map((item, idx) => (
-                          <tr key={idx} className="border-t">
-                            <td className="px-2 py-2">{item.nome}</td>
-                            <td className="px-2 py-2 text-center">
-                              {formatQuantidade(item.quantidade, item.permite_decimal !== false)}
-                              {item.unidade_sigla ? ` ${item.unidade_sigla}` : ""}
-                            </td>
-                            <td className="px-2 py-2 text-right">R$ {item.preco_unit.toFixed(2)}</td>
-                            <td className="px-2 py-2 text-right">
-                              R$ {(item.preco_unit * item.quantidade).toFixed(2)}
-                            </td>
-                            <td className="px-2 py-2 text-right">
-                              <button
-                                onClick={() => removerItem(idx)}
-                                className="text-red-600 hover:text-red-800"
-                                title="Remover"
-                              >
-                                <FiTrash2 />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="text-xs text-gray-700 flex items-center gap-3">
+                    {estoqueLoading ? (
+                      <span className="text-gray-500">Carregando estoque...</span>
+                    ) : typeof estoqueAtual === "number" ? (
+                      <>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] ${estoqueBadgeClass(estoqueAtual)}`}>
+                          Saldo atual: {formatQuantidade(estoqueAtual, permiteDecimal)} {unidadeSiglaAtual}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] ${estoqueBadgeClass(disponivel ?? 0)}`}>
+                          Disponivel (no carrinho): {formatQuantidade(disponivel ?? 0, permiteDecimal)} {unidadeSiglaAtual}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-gray-500">Saldo nao disponivel</span>
+                    )}
                   </div>
                 </div>
               )}
+            </div>
 
-              {/* Observacao */}
+            {itens.length > 0 && (
               <div className="mt-4">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Observacao</label>
-                <textarea
-                  className="w-full text-sm p-2 border border-gray-300 rounded-lg"
-                  value={observacao}
-                  onChange={(e) => setObservacao(e.target.value)}
-                  placeholder="Ex: venda fiado, desconto especial..."
+                <h3 className="text-sm font-medium mb-2">Itens</h3>
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="px-2 py-2 text-left">Produto</th>
+                        <th className="px-2 py-2 text-center">Qtd</th>
+                        <th className="px-2 py-2 text-right">Unit</th>
+                        <th className="px-2 py-2 text-right">Subtotal</th>
+                        <th className="px-2 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {itens.map((item, idx) => (
+                        <tr key={`${item.produto_id}-${idx}`} className="border-t">
+                          <td className="px-2 py-2">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{item.nome}</span>
+                              <span className="text-[11px] text-gray-500">
+                                {formatQuantidade(item.quantidade, item.permite_decimal)} {item.unidade_sigla}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 text-center">{formatQuantidade(item.quantidade, item.permite_decimal)}</td>
+                          <td className="px-2 py-2 text-right">R$ {item.preco_unit.toFixed(2)}</td>
+                          <td className="px-2 py-2 text-right">R$ {(item.preco_unit * item.quantidade).toFixed(2)}</td>
+                          <td className="px-2 py-2 text-right">
+                            <button
+                              className="text-red-500 hover:text-red-700"
+                              onClick={() =>
+                                setItens((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              title="Remover"
+                            >
+                              <FiTrash2 />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Observacoes</label>
+              <textarea
+                className="w-full text-sm p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                rows={3}
+                placeholder="Anote detalhes relevantes para esta venda"
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+              />
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-4 md:flex-row md:items-center md:justify-between">
+              <ResumoTotais
+                itens={itens}
+                descontoPerc={descontoPerc}
+                acrescimoPerc={acrescimoPerc}
+                pagamentos={pagamentos}
+              />
+              <button
+                onClick={async () => {
+                  if (itens.length === 0) {
+                    setMensagem({ texto: 'Adicione ao menos um item', tipo: 'erro' });
+                    return;
+                  }
+
+                  const subtotalCents = itens.reduce((sum, item) => sum + subtotalItemToCents(item), 0);
+                  const descontoCents = Math.round(subtotalCents * (Number(descontoPerc) / 100));
+                  const acrescimoCents = Math.round(subtotalCents * (Number(acrescimoPerc) / 100));
+                  const totalFinalCents = subtotalCents - descontoCents + acrescimoCents;
+                  const totalPagamentosCents = pagamentos.reduce((sum, p) => sum + toCents(p.valor), 0);
+
+                  if (totalPagamentosCents > totalFinalCents) {
+                    setMensagem({
+                      texto: 'Pagamentos excedem o total da venda.',
+                      tipo: 'erro',
+                    });
+                    return;
+                  }
+
+                  let status = 'pendente';
+                  const restanteCents = totalFinalCents - totalPagamentosCents;
+                  if (restanteCents <= 0) status = 'pago';
+                  else if (totalPagamentosCents > 0 && restanteCents > 0) status = 'pago parcial';
+
+                  setLoading(true);
+                  try {
+                    await api.post('/vendas', {
+                      cliente_id: cliente?.id || null,
+                      desconto: fromCents(descontoCents),
+                      acrescimo: fromCents(acrescimoCents),
+                      observacao,
+                      status,
+                      itens: itens.map((item) => ({
+                        produto_id: item.produto_id,
+                        quantidade: item.quantidade,
+                        preco_unit: fromCents(toCents(item.preco_unit)),
+                      })),
+                      pagamentos: pagamentos.map((p) => ({
+                        forma_pagamento: p.forma_pagamento,
+                        valor: fromCents(toCents(p.valor)),
+                        data_vencimento: p.data_vencimento || null,
+                        parcela_numero: p.parcela_numero || null,
+                        parcela_total: p.parcela_total || null,
+                      })),
+                    });
+
+                    setMensagem({ texto: 'Venda registrada com sucesso!', tipo: 'sucesso' });
+                    setCliente(null);
+                    setProduto(null);
+                    setEstoqueAtual(null);
+                    setItens([]);
+                    setDescontoPerc(0);
+                    setAcrescimoPerc(0);
+                    setObservacao('');
+                    userEditouPagamentos.current = false;
+                    setPagamentos([
+                      { forma_pagamento: 'dinheiro', valor: '0.00', parcelas: 1, data_vencimento: hoje },
+                    ]);
+                    setHistoricoPage((prev) => (prev === 1 ? prev : 1));
+                    if (historicoPage === 1) {
+                      carregarVendas();
+                    }
+                  } catch (err) {
+                    setMensagem({
+                      texto: err?.response?.data?.detail || 'Erro ao salvar venda',
+                      tipo: 'erro',
+                    });
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
+                className={`flex items-center text-sm px-5 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 ${
+                  loading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {loading ? 'Salvando...' : (<><FiSave className="mr-2" /> Finalizar Venda</>)}
+              </button>
+            </div>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <Card padding="p-4 md:p-5" className="lg:sticky lg:top-4">
+            <h3 className="text-sm font-semibold mb-3">Totais</h3>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span>Desconto (%)</span>
+                <input
+                  type="number"
+                  className="w-24 text-sm p-2 border border-gray-300 rounded-lg text-right"
+                  value={descontoPerc}
+                  min="0"
+                  onChange={(e) => setDescontoPerc(Math.max(0, Number(e.target.value) || 0))}
                 />
               </div>
 
-              {/* Acoes */}
-              <div className="flex justify-end mt-4">
+              <div className="flex items-center justify-between">
+                <span>Acrescimo (%)</span>
+                <input
+                  type="number"
+                  className="w-24 text-sm p-2 border border-gray-300 rounded-lg text-right"
+                  value={acrescimoPerc}
+                  min="0"
+                  onChange={(e) => setAcrescimoPerc(Math.max(0, Number(e.target.value) || 0))}
+                />
+              </div>
+            </div>
+
+            <hr className="my-3" />
+
+            <ResumoTotais
+              itens={itens}
+              descontoPerc={descontoPerc}
+              acrescimoPerc={acrescimoPerc}
+              pagamentos={pagamentos}
+            />
+
+            <hr className="my-3" />
+
+            <h3 className="text-sm font-semibold mb-2">Pagamentos</h3>
+
+            <PagamentosEditor
+              pagamentos={pagamentos}
+              setPagamentos={setPagamentos}
+              subtotalCents={itens.reduce((sum, item) => sum + subtotalItemToCents(item), 0)}
+              descontoPerc={descontoPerc}
+              acrescimoPerc={acrescimoPerc}
+              userEditouPagamentos={userEditouPagamentos}
+              hoje={hoje}
+            />
+          </Card>
+        </div>
+      </div>
+
+      <Card padding="p-4 md:p-5">
+        <h2 className="text-md font-semibold mb-3 flex items-center">
+          <FiClock className="mr-2" /> Historico de Vendas
+        </h2>
+        {historicoLoading ? (
+          <div className="py-6 text-center text-sm text-gray-500">Carregando vendas...</div>
+        ) : vendas.length === 0 ? (
+          <div className="py-6 text-center text-sm text-gray-500">Nenhuma venda encontrada.</div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Data</th>
+                    <th className="px-4 py-2 text-left">Cliente</th>
+                    <th className="px-4 py-2 text-right">Total</th>
+                    <th className="px-4 py-2 text-left">Status</th>
+                    <th className="px-4 py-2 text-left">Observacao</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vendas.map((v) => (
+                    <tr key={v.id} className="border-t">
+                      <td className="px-4 py-2">
+                        {formatarDataLocal(v.data_venda)}
+                      </td>
+                      <td className="px-4 py-2">{v.cliente?.nome || 'Sem cliente'}</td>
+                      <td className="px-4 py-2 text-right">R$ {formatCurrency(toCents(v.total))}</td>
+                      <td className="px-4 py-2">{getStatus(v)}</td>
+                      <td className="px-4 py-2">{v.observacao || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-gray-500">
+              <div>
+                Pagina <span className="font-semibold">{historicoPage}</span> mostrando <span className="font-semibold">{vendas.length}</span> vendas ({HISTORICO_PAGE_SIZE} por pagina)
+              </div>
+              <div className="flex space-x-2">
                 <button
-                  onClick={async () => {
-                    // salvar
-                    if (itens.length === 0) {
-                      setMensagem({ texto: "Adicione pelo menos um item", tipo: "erro" });
-                      return;
-                    }
-                    const subtotalItens = itens.reduce(
-                      (sum, i) => sum + i.preco_unit * i.quantidade,
-                      0
-                    );
-                    const descontoValor = subtotalItens * (Number(descontoPerc) / 100);
-                    const acrescimoValor = subtotalItens * (Number(acrescimoPerc) / 100);
-                    const totalFinal = subtotalItens - descontoValor + acrescimoValor;
-
-                    const totalPagamentos = pagamentos.reduce(
-                      (sum, p) => sum + Number(p.valor || 0),
-                      0
-                    );
-                    if (totalPagamentos > totalFinal + 0.001) {
-                      setMensagem({
-                        texto: "Pagamentos excedem o total da venda.",
-                        tipo: "erro",
-                      });
-                      return;
-                    }
-
-                    let status = "pendente";
-                    const restante = totalFinal - totalPagamentos;
-                    if (restante <= 0) status = "pago";
-                    else if (totalPagamentos > 0 && restante > 0) status = "pago parcial";
-
-                    setLoading(true);
-                    try {
-                      await api.post("/vendas", {
-                        cliente_id: cliente?.id || null,
-                        desconto: Number(descontoValor.toFixed(2)),
-                        acrescimo: Number(acrescimoValor.toFixed(2)),
-                        observacao,
-                        status,
-                        itens: itens.map((item) => ({
-                          produto_id: item.produto_id,
-                          quantidade: item.quantidade,
-                          preco_unit: Number(item.preco_unit.toFixed(2)),
-                        })),
-                        pagamentos: pagamentos.map((p) => ({
-                          forma_pagamento: p.forma_pagamento,
-                          valor: Number(p.valor),
-                          data_vencimento: p.data_vencimento || null,
-                          parcela_numero: p.parcela_numero || null,
-                          parcela_total: p.parcela_total || null,
-                        })),
-                      });
-
-                      setMensagem({ texto: "Venda registrada com sucesso!", tipo: "sucesso" });
-                      // reset
-                      setCliente(null);
-                      setProduto(null);
-                      setEstoqueAtual(null);
-                      setItens([]);
-                      setDescontoPerc(0);
-                      setAcrescimoPerc(0);
-                      setObservacao("");
-                      userEditouPagamentos.current = false;
-                      setPagamentos([
-                        { forma_pagamento: "dinheiro", valor: "0.00", parcelas: 1, data_vencimento: hoje },
-                      ]);
-                      setHistoricoPage((prev) => (prev === 1 ? prev : 1));
-                      if (historicoPage === 1) {
-                        carregarVendas();
-                      }
-                    } catch (err) {
-                      setMensagem({
-                        texto: err?.response?.data?.detail || "Erro ao salvar venda",
-                        tipo: "erro",
-                      });
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  disabled={loading}
-                  className={`flex items-center text-sm px-5 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 ${
-                    loading ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
+                  onClick={handleHistoricoPrev}
+                  disabled={historicoPage === 1}
+                  className={`px-3 py-1 rounded-md ${historicoPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'}`}
                 >
-                  {loading ? "Salvando..." : (<><FiSave className="mr-2" /> Finalizar Venda</>)}
+                  Anterior
+                </button>
+                <button
+                  onClick={handleHistoricoNext}
+                  disabled={!historicoHasMore}
+                  className={`px-3 py-1 rounded-md ${!historicoHasMore ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 transition'}`}
+                >
+                  Proxima
                 </button>
               </div>
             </div>
-          </div>
-
-          {/* Coluna lateral: totais e pagamentos */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow p-4 md:p-5 sticky top-4">
-              <h3 className="text-sm font-semibold mb-3">Totais</h3>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span>Desconto (%)</span>
-                  <input
-                    type="number"
-                    className="w-24 text-sm p-2 border border-gray-300 rounded-lg text-right"
-                    value={descontoPerc}
-                    min="0"
-                    onChange={(e) => setDescontoPerc(Math.max(0, Number(e.target.value) || 0))}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span>Acrescimo (%)</span>
-                  <input
-                    type="number"
-                    className="w-24 text-sm p-2 border border-gray-300 rounded-lg text-right"
-                    value={acrescimoPerc}
-                    min="0"
-                    onChange={(e) => setAcrescimoPerc(Math.max(0, Number(e.target.value) || 0))}
-                  />
-                </div>
-
-                <hr className="my-2" />
-
-                {/* Calculo aqui tambem (reflete ao vivo) */}
-                <ResumoTotais itens={itens} descontoPerc={descontoPerc} acrescimoPerc={acrescimoPerc} pagamentos={pagamentos} />
-              </div>
-
-              <hr className="my-3" />
-
-              <h3 className="text-sm font-semibold mb-2">Pagamentos</h3>
-
-              <PagamentosEditor
-                pagamentos={pagamentos}
-                setPagamentos={setPagamentos}
-                totalBase={itens.reduce((sum, i) => sum + i.preco_unit * i.quantidade, 0)}
-                descontoPerc={descontoPerc}
-                acrescimoPerc={acrescimoPerc}
-                userEditouPagamentos={userEditouPagamentos}
-                hoje={hoje}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Historico */}
-        <div className="bg-white rounded-xl shadow p-4 md:p-5 mt-4">
-          <h2 className="text-md font-semibold mb-3 flex items-center">
-            <FiClock className="mr-2" /> Historico de Vendas
-          </h2>
-          {historicoLoading ? (
-            <div className="py-6 text-center text-sm text-gray-500">Carregando vendas...</div>
-          ) : vendas.length === 0 ? (
-            <div className="py-6 text-center text-sm text-gray-500">Nenhuma venda encontrada.</div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left">Data</th>
-                      <th className="px-4 py-2 text-left">Cliente</th>
-                      <th className="px-4 py-2 text-right">Total</th>
-                      <th className="px-4 py-2 text-left">Status</th>
-                      <th className="px-4 py-2 text-left">Observacao</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vendas.map((v) => (
-                      <tr key={v.id} className="border-t">
-                        <td className="px-4 py-2">
-                          {formatarDataLocal(v.data_venda)}
-                        </td>
-                        <td className="px-4 py-2">{v.cliente?.nome || "Sem cliente"}</td>
-                        <td className="px-4 py-2 text-right">R$ {Number(v.total).toFixed(2)}</td>
-                        <td className="px-4 py-2">{getStatus(v)}</td>
-                        <td className="px-4 py-2">{v.observacao || "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-gray-500">
-                <div>
-                  Pagina <span className="font-semibold">{historicoPage}</span> mostrando <span className="font-semibold">{vendas.length}</span> vendas ({HISTORICO_PAGE_SIZE} por pagina)
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={handleHistoricoPrev}
-                    disabled={historicoPage === 1}
-                    className={`px-3 py-1 rounded-md ${historicoPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'}`}
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={handleHistoricoNext}
-                    disabled={!historicoHasMore}
-                    className={`px-3 py-1 rounded-md ${!historicoHasMore ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 transition'}`}
-                  >
-                    Proxima
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-      </div>
-    </div>
+          </>
+        )}
+      </Card>
+    </Page>
   );
+
 }
 
 /** ----- componentes auxiliares (totais + pagamentos) ----- */
 
 function ResumoTotais({ itens, descontoPerc, acrescimoPerc, pagamentos }) {
-  const subtotalItens = itens.reduce((sum, i) => sum + i.preco_unit * i.quantidade, 0);
-  const descontoValor = subtotalItens * (Number(descontoPerc) / 100);
-  const acrescimoValor = subtotalItens * (Number(acrescimoPerc) / 100);
-  const totalFinal = subtotalItens - descontoValor + acrescimoValor;
-  const totalPagamentos = pagamentos.reduce((sum, p) => sum + Number(p.valor || 0), 0);
-  const restante = totalFinal - totalPagamentos;
+  const subtotalCents = itens.reduce((sum, item) => sum + subtotalItemToCents(item), 0);
+  const descontoCents = Math.round(subtotalCents * (Number(descontoPerc) / 100));
+  const acrescimoCents = Math.round(subtotalCents * (Number(acrescimoPerc) / 100));
+  const totalFinalCents = subtotalCents - descontoCents + acrescimoCents;
+  const totalPagamentosCents = pagamentos.reduce((sum, p) => sum + toCents(p.valor), 0);
+  const restanteCents = totalFinalCents - totalPagamentosCents;
 
   return (
     <div className="space-y-1 text-sm">
       <div className="flex items-center justify-between">
         <span>Subtotal</span>
-        <span>R$ {subtotalItens.toFixed(2)}</span>
+        <span>R$ {formatCurrency(subtotalCents)}</span>
       </div>
       <div className="flex items-center justify-between">
         <span>Desconto</span>
-        <span>- R$ {descontoValor.toFixed(2)}</span>
+        <span>- R$ {formatCurrency(descontoCents)}</span>
       </div>
       <div className="flex items-center justify-between">
         <span>Acrescimo</span>
-        <span>+ R$ {acrescimoValor.toFixed(2)}</span>
+        <span>+ R$ {formatCurrency(acrescimoCents)}</span>
       </div>
       <div className="flex items-center justify-between font-semibold">
         <span>Total</span>
-        <span>R$ {totalFinal.toFixed(2)}</span>
+        <span>R$ {formatCurrency(totalFinalCents)}</span>
       </div>
       <div className="flex items-center justify-between">
         <span>Pago</span>
-        <span>R$ {totalPagamentos.toFixed(2)}</span>
+        <span>R$ {formatCurrency(totalPagamentosCents)}</span>
       </div>
       <div
         className={`flex items-center justify-between ${
-          restante > 0.001 ? "text-amber-600" : restante < -0.001 ? "text-red-600" : "text-green-700"
+          restanteCents > 0 ? "text-amber-600" : restanteCents < 0 ? "text-red-600" : "text-green-700"
         }`}
       >
         <span>Restante</span>
-        <span>R$ {restante.toFixed(2)}</span>
+        <span>R$ {formatCurrency(restanteCents)}</span>
       </div>
     </div>
   );
@@ -1087,34 +1114,33 @@ function ResumoTotais({ itens, descontoPerc, acrescimoPerc, pagamentos }) {
 function PagamentosEditor({
   pagamentos,
   setPagamentos,
-  totalBase,
+  subtotalCents,
   descontoPerc,
   acrescimoPerc,
   userEditouPagamentos,
   hoje,
 }) {
-  const subtotalItens = totalBase;
-  const descontoValor = subtotalItens * (Number(descontoPerc) / 100);
-  const acrescimoValor = subtotalItens * (Number(acrescimoPerc) / 100);
-  const totalFinal = subtotalItens - descontoValor + acrescimoValor;
+  const descontoCents = Math.round(subtotalCents * (Number(descontoPerc) / 100));
+  const acrescimoCents = Math.round(subtotalCents * (Number(acrescimoPerc) / 100));
+  const totalFinalCents = subtotalCents - descontoCents + acrescimoCents;
 
   useEffect(() => {
     if (!userEditouPagamentos.current) {
       setPagamentos((curr) => {
         if (curr.length === 0) {
-          return [{ forma_pagamento: "dinheiro", valor: totalFinal.toFixed(2), parcelas: 1, data_vencimento: hoje }];
+          return [{ forma_pagamento: "dinheiro", valor: formatCurrency(totalFinalCents), parcelas: 1, data_vencimento: hoje }];
         }
         const novo = [...curr];
-        const outros = novo.slice(1).reduce((s, p) => s + Number(p.valor || 0), 0);
+        const outrosCents = novo.slice(1).reduce((s, p) => s + toCents(p.valor), 0);
         novo[0] = {
           ...novo[0],
-          valor: Math.max(totalFinal - outros, 0).toFixed(2),
+          valor: formatCurrency(Math.max(totalFinalCents - outrosCents, 0)),
           data_vencimento: novo[0].data_vencimento || hoje,
         };
         return novo;
       });
     }
-  }, [totalFinal]); // eslint-disable-line
+  }, [totalFinalCents]); // eslint-disable-line
 
   function formatarValorParaState(v) {
     const s = String(v).replace(/[^\d.,]/g, "").replace(",", ".");
@@ -1141,11 +1167,11 @@ function PagamentosEditor({
   function adicionarPagamento() {
     userEditouPagamentos.current = true;
     setPagamentos((prev) => {
-      const pago = prev.reduce((s, p) => s + Number(p.valor || 0), 0);
-      const faltando = Math.max(totalFinal - pago, 0);
+      const pagoCents = prev.reduce((s, p) => s + toCents(p.valor), 0);
+      const faltandoCents = Math.max(totalFinalCents - pagoCents, 0);
       return [
         ...prev,
-        { forma_pagamento: "dinheiro", valor: faltando.toFixed(2), parcelas: 1, data_vencimento: hoje },
+        { forma_pagamento: "dinheiro", valor: formatCurrency(faltandoCents), parcelas: 1, data_vencimento: hoje },
       ];
     });
   }

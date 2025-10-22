@@ -1,30 +1,27 @@
 export default function FeatureCard({ title, description, icon, onView, onAdd }) {
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition">
-      <div className="flex items-center mb-4">
-        <div className="mr-4">
+    <div className="card-soft group flex h-full flex-col gap-6 rounded-3xl border border-slate-100/70 bg-white/80 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+      <div className="flex items-center gap-4">
+        <div className="rounded-2xl border border-slate-100 bg-blue-50 p-3 text-blue-500">
           {icon}
         </div>
-        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          <p className="text-sm text-slate-500">{description}</p>
+        </div>
       </div>
-      <p className="text-gray-600 mb-6">{description}</p>
-      <div className="flex justify-between">
+      <div className="mt-auto flex items-center justify-between">
         <button
           onClick={onView}
-          className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center transition"
+          type="button"
+          className="btn-ghost text-sm"
         >
           Ver todos
-          <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-          </svg>
         </button>
-        <button
-          onClick={onAdd}
-          className="text-sm font-medium bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition"
-        >
+        <button onClick={onAdd} type="button" className="btn-primary text-sm">
           Adicionar
         </button>
       </div>
     </div>
-  )
+  );
 }

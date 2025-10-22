@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../services/api";
 import { FiBox, FiSave, FiList, FiX } from "react-icons/fi";
 
+import { Page, Card } from "../components/ui";
+import { classNames } from "../utils/classNames";
+
 /* ---------------- utils ---------------- */
 function useDebouncedValue(value, delay = 300) {
   const [debounced, setDebounced] = useState(value);
@@ -438,54 +441,50 @@ export default function MovimentosEstoque() {
   const displayTotal = total || (movimentos.length === 0 ? 0 : showingEnd);
   const canGoNext = hasNext || showingEnd < total;
 
+  const messageTone =
+    mensagem?.tipo === "sucesso"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : mensagem?.tipo === "erro"
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : "border-blue-200 bg-blue-50 text-blue-700";
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-xl shadow p-5 md:p-6">
-          {/* Cabeçalho */}
-          <h1 className="text-xl font-bold text-gray-800 flex items-center mb-4">
-            <FiBox className="mr-2" />
-            Movimentações de Estoque
-          </h1>
+    <Page
+      title="Movimentacoes de Estoque"
+      subtitle="Registre entradas, saidas e ajustes e acompanhe o historico de movimentacoes."
+      icon={<FiBox className="h-5 w-5" />}
+    >
+      {mensagem.texto && (
+        <Card className={classNames('text-sm', messageTone)}>
+          {mensagem.texto}
+        </Card>
+      )}
 
-          {/* Mensagem */}
-          {mensagem.texto && (
-            <div
-              className={`mb-4 p-3 rounded-md text-sm ${
-                mensagem.tipo === "sucesso"
-                  ? "bg-green-100 text-green-800"
-                  : "bg-red-100 text-red-800"
-              }`}
-            >
-              {mensagem.texto}
-            </div>
-          )}
-
-          {/* Formulário */}
-          <form onSubmit={salvarMovimento} className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-            {/* Produto (typeahead) */}
+      <Card padding="p-5 md:p-6">
+        <div className="space-y-6">
+          <form onSubmit={salvarMovimento} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Produto*</label>
               {!produto ? (
                 <AsyncSearchBox
                   entity="produtos"
-                  placeholder="Digite 2+ letras, código ou escaneie o código de barras…"
+                  placeholder="Digite 2+ letras, codigo ou escaneie o codigo de barras..."
                   minLen={2}
                   formatOption={(p) =>
-                    `${p.codigo_produto ? p.codigo_produto + " - " : ""}${p.nome}`
+                    `${p.codigo_produto ? p.codigo_produto + ' - ' : ''}${p.nome}`
                   }
                   onSelect={async (p) => {
                     setProduto(p);
                     await carregarEstoque(p.id);
                   }}
-                  clearOnSelect={true}
+                  clearOnSelect
                 />
               ) : (
                 <div className="flex flex-col gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-gray-700">
                       <span className="font-medium">
-                        {produto.codigo_produto ? `${produto.codigo_produto} - ` : ""}
+                        {produto.codigo_produto ? `${produto.codigo_produto} - ` : ''}
                         {produto.nome}
                       </span>
                     </div>
@@ -495,7 +494,7 @@ export default function MovimentosEstoque() {
                       onClick={() => {
                         setProduto(null);
                         setEstoqueAtual(null);
-                        setCustoUnitario("");
+                        setCustoUnitario('');
                       }}
                     >
                       Trocar
@@ -503,20 +502,19 @@ export default function MovimentosEstoque() {
                   </div>
                   <div className="text-xs text-gray-700">
                     {estoqueLoading ? (
-                      <span className="text-gray-500">Carregando estoque…</span>
-                    ) : typeof estoqueAtual === "number" ? (
+                      <span className="text-gray-500">Carregando estoque...</span>
+                    ) : typeof estoqueAtual === 'number' ? (
                       <span className={`px-2 py-0.5 rounded-full ${estoqueBadgeClass(estoqueAtual)}`}>
                         Saldo atual: {estoqueAtual} un.
                       </span>
                     ) : (
-                      <span className="text-gray-500">Saldo não disponível</span>
+                      <span className="text-gray-500">Saldo nao disponivel</span>
                     )}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Tipo */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Movimento*</label>
               <select
@@ -526,12 +524,11 @@ export default function MovimentosEstoque() {
                 required
               >
                 <option value="entrada">Entrada</option>
-                <option value="saida">Saída</option>
+                <option value="saida">Saida</option>
                 <option value="ajuste">Ajuste</option>
               </select>
             </div>
 
-            {/* Quantidade */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade*</label>
               <input
@@ -542,20 +539,17 @@ export default function MovimentosEstoque() {
                 onChange={(e) => setQuantidade(Math.max(1, Number(e.target.value) || 1))}
                 required
               />
-              {tipo === "saida" && typeof estoqueAtual === "number" && (
+              {tipo === 'saida' && typeof estoqueAtual === 'number' && (
                 <p className="text-[11px] mt-1">
-                  Disponível para saída:{" "}
-                  <span className={`px-1 rounded ${estoqueBadgeClass(estoqueAtual)}`}>
-                    {estoqueAtual} un.
-                  </span>
+                  Disponivel para saida:{' '}
+                  <span className={`px-1 rounded ${estoqueBadgeClass(estoqueAtual)}`}>{estoqueAtual} un.</span>
                 </p>
               )}
             </div>
 
-            {/* Custo unitario */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Custo unitario{tipo === "entrada" ? "*" : " (opcional)"}
+                Custo unitario{tipo === 'entrada' ? '*' : ' (opcional)'}
               </label>
               <input
                 type="number"
@@ -564,46 +558,43 @@ export default function MovimentosEstoque() {
                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={custoUnitario}
                 onChange={(e) => setCustoUnitario(e.target.value)}
-                required={tipo === "entrada"}
+                required={tipo === 'entrada'}
               />
-              {tipo === "entrada" ? (
+              {tipo === 'entrada' ? (
                 <p className="text-[11px] mt-1 text-gray-600">
                   Informe o custo unitario da entrada para atualizar o custo medio do produto.
                 </p>
               ) : null}
             </div>
 
-            {/* Observação */}
             <div className="lg:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Observação</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Observacao</label>
               <input
                 type="text"
                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
-                placeholder="Ex: Compra fornecedor X / Perda / Ajuste inventário…"
+                placeholder="Ex: Compra fornecedor X / Perda / Ajuste inventario..."
               />
             </div>
 
-            {/* Botão */}
             <div className="flex items-end justify-end">
               <button
                 type="submit"
                 disabled={loading}
                 className="flex items-center bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition disabled:opacity-60"
               >
-                {loading ? "Salvando..." : <> <FiSave className="mr-2" /> Registrar </>}
+                {loading ? 'Salvando...' : (<> <FiSave className="mr-2" /> Registrar </>)}
               </button>
             </div>
           </form>
 
-          {/* Filtros e paginação da LISTA (igual à tela de preços) */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="relative w-full md:w-80">
               <input
                 type="text"
                 className="w-full pl-3 pr-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Buscar por produto, tipo, observação…"
+                placeholder="Buscar por produto, tipo, observacao..."
                 value={q}
                 onChange={(e) => {
                   setQ(e.target.value);
@@ -611,9 +602,8 @@ export default function MovimentosEstoque() {
                 }}
               />
             </div>
-
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Por página:</span>
+              <span className="text-sm text-gray-600">Por pagina:</span>
               <select
                 className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
                 value={perPage}
@@ -624,91 +614,84 @@ export default function MovimentosEstoque() {
                 }}
               >
                 {[10, 25, 50, 100, 200].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
+                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Histórico */}
-          <h2 className="text-md font-semibold mb-3 flex items-center">
-            <FiList className="mr-2" />
-            Histórico de Movimentações
-          </h2>
-
-          <div className="overflow-x-auto border border-gray-200 rounded-lg">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left">Data</th>
-                  <th className="px-4 py-2 text-left">Produto</th>
-                  <th className="px-4 py-2 text-left">Tipo</th>
-                  <th className="px-4 py-2 text-right">Quantidade</th>
-                  <th className="px-4 py-2 text-right">Custo unitario</th>
-                  <th className="px-4 py-2 text-right">Valor total</th>
-                  <th className="px-4 py-2 text-left">Observação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
+          <div>
+            <h2 className="text-md font-semibold mb-3 flex items-center">
+              <FiList className="mr-2" /> Historico de Movimentacoes
+            </h2>
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
-                      Carregando...
-                    </td>
+                    <th className="px-4 py-2 text-left">Data</th>
+                    <th className="px-4 py-2 text-left">Produto</th>
+                    <th className="px-4 py-2 text-left">Tipo</th>
+                    <th className="px-4 py-2 text-right">Quantidade</th>
+                    <th className="px-4 py-2 text-right">Custo unitario</th>
+                    <th className="px-4 py-2 text-right">Valor total</th>
+                    <th className="px-4 py-2 text-left">Observacao</th>
                   </tr>
-                ) : movimentos.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
-                      Nenhuma movimentação encontrada.
-                    </td>
-                  </tr>
-                ) : (
-                  movimentos.map((m) => (
-                    <tr key={m.id} className="border-t">
-                      <td className="px-4 py-2 text-gray-600">{formatarDataLocal(m.data_movimento)}</td>
-                      <td className="px-4 py-2">{m.produto?.nome || "Produto removido"}</td>
-                      <td className="px-4 py-2 capitalize">{m.tipo}</td>
-                      <td className="px-4 py-2 text-right">{m.quantidade}</td>
-                      <td className="px-4 py-2 text-right">{formatMoney(m.custo_unitario)}</td>
-                      <td className="px-4 py-2 text-right">{formatMoney(m.valor_total)}</td>
-                      <td className="px-4 py-2 text-gray-600">{m.observacao || "-"}</td>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-6 text-center text-gray-500">Carregando...</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Paginação (igual à tela de preços) */}
-          <div className="mt-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-            <div className="text-sm text-gray-600">
-              Página <span className="font-medium">{page}</span> — mostrando{" "}
-              <span className="font-medium">
-                {movimentos.length === 0 ? 0 : `${showingStart}-${showingEnd}`}
-              </span>{" "}
-              de <span className="font-medium">{displayTotal}</span> registros
+                  ) : movimentos.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-6 text-center text-gray-500">Nenhuma movimentacao encontrada.</td>
+                    </tr>
+                  ) : (
+                    movimentos.map((m) => (
+                      <tr key={m.id} className="border-t">
+                        <td className="px-4 py-2 text-gray-600">{formatarDataLocal(m.data_movimento)}</td>
+                        <td className="px-4 py-2">{m.produto?.nome || 'Produto removido'}</td>
+                        <td className="px-4 py-2 capitalize">{m.tipo}</td>
+                        <td className="px-4 py-2 text-right">{m.quantidade}</td>
+                        <td className="px-4 py-2 text-right">{formatMoney(m.custo_unitario)}</td>
+                        <td className="px-4 py-2 text-right">{formatMoney(m.valor_total)}</td>
+                        <td className="px-4 py-2 text-gray-600">{m.observacao || '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-            <div className="flex gap-2">
-              <button
-                className="px-3 py-1 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition disabled:opacity-50"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Anterior
-              </button>
-              <button
-                className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
-                disabled={!canGoNext || loading}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Próxima
-              </button>
+
+            <div className="mt-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <div className="text-sm text-gray-600">
+                Pagina <span className="font-medium">{page}</span> mostrando{' '}
+                <span className="font-medium">
+                  {movimentos.length === 0 ? 0 : `${showingStart}-${showingEnd}`}
+                </span>{' '}
+                de <span className="font-medium">{displayTotal}</span> registros
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="px-3 py-1 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition disabled:opacity-50"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </button>
+                <button
+                  className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+                  disabled={!canGoNext || loading}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Proxima
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </Card>
+    </Page>
   );
+
 }

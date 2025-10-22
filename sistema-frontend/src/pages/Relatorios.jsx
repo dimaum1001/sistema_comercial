@@ -5,6 +5,9 @@ import api from '../services/api'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
+import { FiBarChart2 } from 'react-icons/fi'
+import { Page, Card } from '../components/ui'
+
 const fmtBRL = (n) =>
   Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0))
 const fmtInt = (n) => Intl.NumberFormat('pt-BR').format(Number(n || 0))
@@ -403,9 +406,9 @@ export default function Relatorios() {
 
 
   const HeaderPeriodo = () => (
-    <div className="bg-white shadow-md rounded px-6 pt-5 pb-6 mb-6">
+    <Card padding="p-6" className="shadow-md">
       <h3 className="text-xl font-semibold mb-4">Periodo</h3>
-      <div className="flex flex-wrap items-end gap-4 mb-4">
+      <div className="flex flex-wrap items-end gap-4">
         <input type="date" name="inicio" value={periodo.inicio} onChange={handlePeriodoChange} className="shadow border rounded py-2 px-3" />
         <input type="date" name="fim" value={periodo.fim} onChange={handlePeriodoChange} className="shadow border rounded py-2 px-3" />
         <button onClick={aplicarPeriodo} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded">
@@ -413,7 +416,7 @@ export default function Relatorios() {
         </button>
         <button onClick={exportarPDF} className="bg-green-600 text-white px-4 py-2 rounded">Exportar PDF</button>
       </div>
-    </div>
+    </Card>
   )
 
   const Tabs = () => (
@@ -433,225 +436,229 @@ export default function Relatorios() {
   )
 
   return (
-    <div className="container mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">Relatorios</h2>
-      <Tabs />
+    <Page
+      title="Relatorios"
+      subtitle="Explore indicadores financeiros e operacionais."
+      icon={<FiBarChart2 className="h-5 w-5" />}
+    >
+      <div className="space-y-4">
+        <Tabs />
 
-      {tab === 'vendas-resumo' && (
-        <>
-          <HeaderPeriodo />
-          <div className="bg-white p-6 rounded shadow space-y-4">
-            <h3 className="text-xl font-semibold">Resumo de Vendas</h3>
-            <div>Total de vendas: {fmtInt(resumoVendas.qtd_vendas)}</div>
-            <div>Valor total: {fmtBRL(resumoVendas.total_vendas)}</div>
+        {tab === 'vendas-resumo' && (
+          <>
+            <HeaderPeriodo />
+            <Card padding="p-6" className="space-y-4">
+              <h3 className="text-xl font-semibold">Resumo de Vendas</h3>
+              <div>Total de vendas: {fmtInt(resumoVendas.qtd_vendas)}</div>
+              <div>Valor total: {fmtBRL(resumoVendas.total_vendas)}</div>
 
-            <div className="mt-4">
-              <h4 className="font-semibold mb-2">Por forma de pagamento</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {[
-                  ['Dinheiro', resumoVendas.totais_por_forma.dinheiro],
-                  ['Credito', resumoVendas.totais_por_forma.credito],
-                  ['Debito', resumoVendas.totais_por_forma.debito],
-                  ['PIX', resumoVendas.totais_por_forma.pix],
-                  ['Outros', resumoVendas.totais_por_forma.outros],
-                ].map(([label, val]) => (
-                  <div key={label} className="border rounded p-3 flex items-center justify-between">
-                    <span>{label}</span>
-                    <strong>{fmtBRL(val)}</strong>
-                  </div>
-                ))}
+              <div className="mt-4">
+                <h4 className="font-semibold mb-2">Por forma de pagamento</h4>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                  {[
+                    ['Dinheiro', resumoVendas.totais_por_forma.dinheiro],
+                    ['Credito', resumoVendas.totais_por_forma.credito],
+                    ['Debito', resumoVendas.totais_por_forma.debito],
+                    ['PIX', resumoVendas.totais_por_forma.pix],
+                    ['Outros', resumoVendas.totais_por_forma.outros],
+                  ].map(([label, val]) => (
+                    <Card key={label} padding="p-3" className="flex items-center justify-between">
+                      <span>{label}</span>
+                      <strong>{fmtBRL(val)}</strong>
+                    </Card>
+                  ))}
+                </div>
               </div>
-            </div>
-          </div>
-        </>
-      )}
+            </Card>
+          </>
+        )}
 
-      {tab === 'vendas-detalhadas' && (
-        <>
-          <HeaderPeriodo />
-          <div className="bg-white p-6 rounded shadow">
+        {tab === 'vendas-detalhadas' && (
+          <>
+            <HeaderPeriodo />
+            <Card padding="p-6" className="space-y-4">
+              <TopPager
+                page={vdPage}
+                perPage={vdPerPage}
+                total={vdTotal}
+                onPrev={() => vdPage > 1 && fetchVendasDetalhadas({ page: vdPage - 1, perPage: vdPerPage })}
+                onNext={() => vdPage < Math.ceil(vdTotal / vdPerPage) && fetchVendasDetalhadas({ page: vdPage + 1, perPage: vdPerPage })}
+                onPerPage={(n) => fetchVendasDetalhadas({ page: 1, perPage: n })}
+              />
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-left py-2 px-3">Data</th>
+                      <th className="text-left py-2 px-3">Cliente</th>
+                      <th className="text-right py-2 px-3">Total</th>
+                      <th className="text-left py-2 px-3">Pagamento(s)</th>
+                      <th className="text-left py-2 px-3">Itens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vdItens.map((v) => (
+                      <tr key={v.id} className="border-top">
+                        <td className="py-2 px-3">{fmtDiaHora(v.data_venda)}</td>
+                        <td className="py-2 px-3">{(v.cliente && String(v.cliente).trim()) || 'Venda sem cliente'}</td>
+                        <td className="py-2 px-3 text-right">{fmtBRL(v.total)}</td>
+                        <td className="py-2 px-3">
+                          {v.pagamentos?.length
+                            ? v.pagamentos.map((p, ix) => (
+                                <div key={ix}>
+                                  {(p.forma || p.forma_pagamento || '').toUpperCase()}  {fmtBRL(p.valor)}
+                                </div>
+                              ))
+                            : (v.formas?.join(', ').toUpperCase() || '')}
+                        </td>
+                        <td className="py-2 px-3">
+                          {v.itens?.map((i, ix) => (
+                            <div key={ix}>{i.produto} (x{i.quantidade})</div>
+                          ))}
+                        </td>
+                      </tr>
+                    ))}
+                    {!vdLoading && vdItens.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="text-center py-4 text-gray-500">
+                          Nenhuma venda encontrada neste periodo.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
+
+        {tab === 'produtos' && (
+          <>
+            <HeaderPeriodo />
+            <Card padding="p-6" className="space-y-4">
+              <h3 className="text-xl font-semibold">Produtos Mais Vendidos</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th>Codigo</th>
+                      <th className="text-right">Quantidade</th>
+                      <th className="text-right">Faturamento</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {produtosMaisVendidos.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.produto}</td>
+                        <td>{item.codigo}</td>
+                        <td className="text-right">{fmtInt(item.quantidade)}</td>
+                        <td className="text-right">{fmtBRL(item.faturamento)}</td>
+                      </tr>
+                    ))}
+                    {produtosMaisVendidos.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="text-center py-2">Nenhum item encontrado.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
+
+        {tab === 'estoque' && (
+          <Card padding="p-6" className="space-y-4">
             <TopPager
-              page={vdPage}
-              perPage={vdPerPage}
-              total={vdTotal}
-              onPrev={() => vdPage > 1 && fetchVendasDetalhadas({ page: vdPage - 1, perPage: vdPerPage })}
-              onNext={() => vdPage < Math.ceil(vdTotal / vdPerPage) && fetchVendasDetalhadas({ page: vdPage + 1, perPage: vdPerPage })}
-              onPerPage={(n) => fetchVendasDetalhadas({ page: 1, perPage: n })}
+              page={stkPage}
+              perPage={stkPerPage}
+              total={stkTotal}
+              onPrev={() => stkPage > 1 && fetchEstoque({ page: stkPage - 1, perPage: stkPerPage, q: stkQ })}
+              onNext={() => fetchEstoque({ page: stkPage + 1, perPage: stkPerPage, q: stkQ })}
+              onPerPage={(n) => fetchEstoque({ page: 1, perPage: n, q: stkQ })}
             />
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="text-left py-2 px-3">Data</th>
-                    <th className="text-left py-2 px-3">Cliente</th>
-                    <th className="text-right py-2 px-3">Total</th>
-                    <th className="text-left py-2 px-3">Pagamento(s)</th>
-                    <th className="text-left py-2 px-3">Itens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vdItens.map((v) => (
-                    <tr key={v.id} className="border-top">
-                      <td className="py-2 px-3">{fmtDiaHora(v.data_venda)}</td>
-                      <td className="py-2 px-3">{(v.cliente && String(v.cliente).trim()) || 'Venda sem cliente'}</td>
-                      <td className="py-2 px-3 text-right">{fmtBRL(v.total)}</td>
-                      <td className="py-2 px-3">
-                        {v.pagamentos?.length
-                          ? v.pagamentos.map((p, ix) => (
-                              <div key={ix}>
-                                {(p.forma || p.forma_pagamento || '').toUpperCase()}  {fmtBRL(p.valor)}
-                              </div>
-                            ))
-                          : (v.formas?.join(', ').toUpperCase() || '')}
-                      </td>
-                      <td className="py-2 px-3">
-                        {v.itens?.map((i, ix) => (
-                          <div key={ix}>{i.produto} (x{i.quantidade})</div>
-                        ))}
-                      </td>
-                    </tr>
-                  ))}
-                  {!vdLoading && vdItens.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="text-center py-4 text-gray-500">
-                        Nenhuma venda encontrada neste periodo.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                className="border rounded px-3 py-2"
+                placeholder="Buscar por nome/codigo..."
+                value={stkQ}
+                onChange={(e) => setStkQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') fetchEstoque({ page: 1, perPage: stkPerPage, q: e.currentTarget.value })
+                }}
+              />
             </div>
-          </div>
-        </>
-      )}
 
-      {tab === 'produtos' && (
-        <>
-          <HeaderPeriodo />
-          <div className="bg-white p-6 rounded shadow">
-            <h3 className="text-xl font-semibold mb-4">Produtos Mais Vendidos</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
-                  <tr>
-                    <th>Produto</th>
-                    <th>Codigo</th>
-                    <th className="text-right">Quantidade</th>
-                    <th className="text-right">Faturamento</th>
+                  <tr className="text-left">
+                    <th className="py-2 px-4">Produto</th>
+                    <th className="py-2 px-4">Codigo</th>
+                    <th className="py-2 px-4 text-right">Estoque</th>
+                    <th className="py-2 px-4 text-right">Estoque Minimo</th>
+                    <th className="py-2 px-4 text-center">Alerta</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {produtosMaisVendidos.map((item, idx) => (
-                    <tr key={idx}>
-                      <td>{item.produto}</td>
-                      <td>{item.codigo}</td>
-                      <td className="text-right">{fmtInt(item.quantidade)}</td>
-                      <td className="text-right">{fmtBRL(item.faturamento)}</td>
+                  {stkItens.map((p) => (
+                    <tr key={p.produto_id}>
+                      <td className="py-2 px-4">{p.produto}</td>
+                      <td className="py-2 px-4">{p.codigo}</td>
+                      <td className="py-2 px-4 text-right">{fmtInt(p.estoque)}</td>
+                      <td className="py-2 px-4 text-right">{fmtInt(p.estoque_minimo)}</td>
+                      <td className="py-2 px-4 text-center">{p.alerta ? 'Baixo' : 'OK'}</td>
                     </tr>
                   ))}
-                  {produtosMaisVendidos.length === 0 && (
+                  {!stkLoading && stkItens.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="text-center py-2">Nenhum item encontrado.</td>
+                      <td colSpan={5} className="py-3 px-4 text-center text-gray-500">
+                        Nenhum produto encontrado.
+                      </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
-          </div>
-        </>
-      )}
+          </Card>
+        )}
 
-      {tab === 'estoque' && (
-        <div className="bg-white p-6 rounded shadow">
-          <TopPager
-            page={stkPage}
-            perPage={stkPerPage}
-            total={stkTotal}
-            onPrev={() => stkPage > 1 && fetchEstoque({ page: stkPage - 1, perPage: stkPerPage, q: stkQ })}
-            onNext={() => stkPage < Math.ceil(stkTotal / stkPerPage) && fetchEstoque({ page: stkPage + 1, perPage: stkPerPage, q: stkQ })}
-            onPerPage={(n) => fetchEstoque({ page: 1, perPage: n, q: stkQ })}
-          />
-
-          <div className="mb-3">
-            <input
-              className="border rounded px-3 py-2 w-full md:w-96"
-              placeholder="Buscar por nome/codigo..."
-              value={stkQ}
-              onChange={(e) => setStkQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') fetchEstoque({ page: 1, perPage: stkPerPage, q: e.currentTarget.value })
-              }}
-            />
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="text-left">
-                  <th className="py-2 px-4">Produto</th>
-                  <th className="py-2 px-4">Codigo</th>
-                  <th className="py-2 px-4 text-right">Estoque</th>
-                  <th className="py-2 px-4 text-right">Estoque Minimo</th>
-                  <th className="py-2 px-4 text-center">Alerta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stkItens.map((p) => (
-                  <tr key={p.produto_id}>
-                    <td className="py-2 px-4">{p.produto}</td>
-                    <td className="py-2 px-4">{p.codigo}</td>
-                    <td className="py-2 px-4 text-right">{fmtInt(p.estoque)}</td>
-                    <td className="py-2 px-4 text-right">{fmtInt(p.estoque_minimo)}</td>
-                    <td className="py-2 px-4 text-center">{p.alerta ? 'Baixo' : 'OK'}</td>
-                  </tr>
-                ))}
-                {!stkLoading && stkItens.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-3 px-4 text-center text-gray-500">
-                      Nenhum produto encontrado.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {tab === 'ranking' && (
-        <>
-          <HeaderPeriodo />
-          <div className="bg-white p-6 rounded shadow">
-            <h3 className="text-xl font-semibold mb-4">Ranking de Clientes</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr>
-                    <th>Cliente</th>
-                    <th className="text-right">Qtde Compras</th>
-                    <th className="text-right">Total Gasto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rankingClientes.map((item, idx) => (
-                    <tr key={idx}>
-                      <td>{item.cliente}</td>
-                      <td className="text-right">{fmtInt(item.qtd_compras)}</td>
-                      <td className="text-right">{fmtBRL(item.total_gasto)}</td>
-                    </tr>
-                  ))}
-                  {rankingClientes.length === 0 && (
+        {tab === 'ranking' && (
+          <>
+            <HeaderPeriodo />
+            <Card padding="p-6" className="space-y-4">
+              <h3 className="text-xl font-semibold">Ranking de Clientes</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
                     <tr>
-                      <td colSpan={3} className="text-center py-2">Nenhum cliente encontrado.</td>
+                      <th>Cliente</th>
+                      <th className="text-right">Compras</th>
+                      <th className="text-right">Total gasto</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
+                  </thead>
+                  <tbody>
+                    {rankingClientes.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.cliente}</td>
+                        <td className="text-right">{fmtInt(item.qtd_compras)}</td>
+                        <td className="text-right">{fmtBRL(item.total_gasto)}</td>
+                      </tr>
+                    ))}
+                    {rankingClientes.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="text-center py-2">Nenhum cliente encontrado.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
+      </div>
+    </Page>
+  );
+
 }
-

@@ -159,7 +159,10 @@ export default function NovoProduto() {
     setFormData(prev => {
       if (name === 'custo') {
         const next = { ...prev, custo: value }
-        if (!prev.custo_medio) {
+        const shouldSyncCustoMedio =
+          prev.custo_medio === '' || prev.custo_medio === String(prev.custo ?? '')
+
+        if (shouldSyncCustoMedio) {
           next.custo_medio = value
         }
         return next

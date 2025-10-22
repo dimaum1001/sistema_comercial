@@ -1,32 +1,33 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../services/api";
-import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch } from "react-icons/fi";
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
+import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch, FiUsers } from 'react-icons/fi';
+import { PageHeader, EmptyState } from '../components/ui';
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token');
 
     if (!token) {
-      navigate("/login");
+      navigate('/login');
       return;
     }
 
     const fetchUsuarios = async () => {
       try {
-        const response = await api.get("/usuarios", {
+        const response = await api.get('/usuarios', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
-        setUsuarios(response.data);
-      } catch (err) {
-        console.error("Erro ao buscar usuários:", err);
+        setUsuarios(Array.isArray(response.data) ? response.data : []);
+      } catch (error) {
+        console.error('Erro ao buscar usuarios:', error);
       } finally {
         setLoading(false);
       }
@@ -35,182 +36,179 @@ export default function Usuarios() {
     fetchUsuarios();
   }, [navigate]);
 
-  const filteredUsuarios = usuarios.filter(
-    (u) =>
-      u.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsuarios = useMemo(() => {
+    const termo = searchTerm.toLowerCase();
+    return usuarios.filter((usuario) => {
+      const nome = (usuario.nome || '').toLowerCase();
+      const email = (usuario.email || '').toLowerCase();
+      return nome.includes(termo) || email.includes(termo);
+    });
+  }, [usuarios, searchTerm]);
 
   const handleDelete = async (id) => {
-    if (window.confirm("Tem certeza que deseja excluir este usuário?")) {
-      try {
-        const token = localStorage.getItem("token");
-        await api.delete(`/usuarios/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setUsuarios(usuarios.filter((u) => u.id !== id));
-      } catch (err) {
-        console.error("Erro ao excluir usuário:", err);
-      }
+    if (!window.confirm('Tem certeza que deseja excluir este usuario?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      await api.delete(`/usuarios/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUsuarios((prev) => prev.filter((usuario) => usuario.id !== id));
+    } catch (error) {
+      console.error('Erro ao excluir usuario:', error);
     }
   };
 
+  const headerActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" className="btn-secondary" onClick={() => navigate('/dashboard')}>
+        <FiArrowLeft className="h-4 w-4" />
+        Voltar
+      </button>
+      <button type="button" className="btn-primary" onClick={() => navigate('/usuarios/novo')}>
+        <FiUserPlus className="h-4 w-4" />
+        Novo usuario
+      </button>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="h-12 w-12 bg-blue-200 rounded-full mb-4"></div>
-          <div className="h-4 w-32 bg-blue-200 rounded"></div>
+      <div className="page-container">
+        <PageHeader
+          title="Usuarios"
+          subtitle="Controle de acesso e perfis do sistema."
+          icon={<FiUsers className="h-5 w-5" />}
+          actions={headerActions}
+        />
+        <div className="flex min-h-[240px] items-center justify-center rounded-3xl border border-blue-100 bg-white/80 shadow-sm">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-12 w-12 animate-pulse rounded-full bg-blue-200" />
+            <div className="h-4 w-32 animate-pulse rounded-full bg-blue-200" />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Usuários Cadastrados</h2>
-        <div className="flex space-x-4">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
-          >
-            <FiArrowLeft className="mr-2" />
-            Voltar
-          </button>
-          <button
-            onClick={() => navigate("/usuarios/novo")}
-            className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-          >
-            <FiUserPlus className="mr-2" />
-            Novo Usuário
-          </button>
-        </div>
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="Usuarios"
+        subtitle="Controle de acesso e perfis do sistema."
+        icon={<FiUsers className="h-5 w-5" />}
+        actions={headerActions}
+      />
 
-      {/* Barra de pesquisa */}
-      <div className="mb-6 relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <FiSearch className="text-gray-400" />
+      <div className="space-y-6">
+        <div className="card p-4 sm:p-6">
+          <div className="relative">
+            <FiSearch className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Pesquise por nome ou email"
+              className="input pl-12"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </div>
         </div>
-        <input
-          type="text"
-          placeholder="Pesquisar usuários por nome ou email..."
-          className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
 
-      {filteredUsuarios.length === 0 ? (
-        <div className="bg-white p-8 rounded-xl shadow-sm text-center">
-          <p className="text-gray-600 mb-4">
-            {searchTerm
-              ? "Nenhum usuário encontrado para a pesquisa."
-              : "Nenhum usuário cadastrado ainda."}
-          </p>
-          <button
-            onClick={() => navigate("/usuarios/novo")}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-          >
-            Cadastrar Primeiro Usuário
-          </button>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nome
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tipo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Data Cadastro
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ações
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredUsuarios.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center">
-                          <span className="text-purple-600 font-medium">
-                            {u.nome.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {u.nome}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {u.email || "Sem e-mail"}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {u.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
-                      {u.tipo}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(u.criado_em).toLocaleDateString("pt-BR")}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => navigate(`/usuarios/editar/${u.id}`)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50 transition"
-                          title="Editar"
-                        >
-                          <FiEdit />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(u.id)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded-full hover:bg-red-50 transition"
-                          title="Excluir"
-                        >
-                          <FiTrash2 />
-                        </button>
-                      </div>
-                    </td>
+        {filteredUsuarios.length === 0 ? (
+          <EmptyState
+            title={searchTerm ? 'Nenhum usuario encontrado' : 'Nenhum usuario cadastrado'}
+            description={
+              searchTerm
+                ? 'Ajuste os filtros ou verifique se o usuario esta ativo.'
+                : 'Cadastre o primeiro usuario para liberar acessos.'
+            }
+            actions={
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => navigate('/usuarios/novo')}
+              >
+                <FiUserPlus className="h-4 w-4" />
+                Cadastrar usuario
+              </button>
+            }
+          />
+        ) : (
+          <div className="table-shell">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Nome
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Email
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Tipo
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Data cadastro
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Acoes
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {filteredUsuarios.map((usuario) => (
+                    <tr key={usuario.id} className="transition hover:bg-slate-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-sm font-semibold text-purple-600">
+                            {(usuario.nome || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900">{usuario.nome}</div>
+                            <div className="text-sm text-slate-500">{usuario.email || 'Sem email'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{usuario.email || 'Sem email'}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {(usuario.tipo || 'desconhecido').toUpperCase()}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {usuario.criado_em
+                          ? new Date(usuario.criado_em).toLocaleDateString('pt-BR')
+                          : '--'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/usuarios/editar/${usuario.id}`)}
+                            className="btn-ghost h-9 w-9 rounded-full p-0 text-blue-600 hover:text-blue-700"
+                            title="Editar"
+                          >
+                            <FiEdit />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(usuario.id)}
+                            className="btn-ghost h-9 w-9 rounded-full p-0 text-rose-600 hover:text-rose-700"
+                            title="Excluir"
+                          >
+                            <FiTrash2 />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Paginação (opcional) */}
-      {filteredUsuarios.length > 0 && (
-        <div className="mt-4 flex justify-between items-center bg-white px-6 py-3 rounded-b-xl shadow-sm">
-          <div className="text-sm text-gray-500">
-            Mostrando <span className="font-medium">{filteredUsuarios.length}</span> de{" "}
-            <span className="font-medium">{usuarios.length}</span> usuários
-          </div>
-          <div className="flex space-x-2">
-            <button className="px-3 py-1 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-              Anterior
-            </button>
-            <button className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition">
-              Próxima
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

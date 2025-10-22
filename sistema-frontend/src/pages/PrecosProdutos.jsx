@@ -306,6 +306,33 @@ export default function PrecosProdutos() {
       ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
       : "-";
 
+  const fmtDataHoraBR = (valor) => {
+    if (!valor) return "—";
+    const toDate = (raw) => {
+      if (raw instanceof Date) return raw;
+      if (typeof raw === "string") {
+        const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+        const hasOffset = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
+        const iso = hasOffset ? normalized : `${normalized}Z`;
+        const parsed = new Date(iso);
+        if (!Number.isNaN(parsed.getTime())) return parsed;
+      }
+      const parsed = new Date(raw);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+    const data = toDate(valor);
+    if (!data) return "—";
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "America/Sao_Paulo",
+    }).format(data);
+  };
+
   const renderSkip = Math.max(0, (page - 1) * perPage);
   const showingStart = lista.length === 0 ? 0 : renderSkip + 1;
   const showingEnd = renderSkip + lista.length;
@@ -463,10 +490,10 @@ export default function PrecosProdutos() {
                     </td>
                     <td className="px-4 py-2">{p.ativo ? "Sim" : "Não"}</td>
                     <td className="px-4 py-2">
-                      {p.data_inicio ? new Date(p.data_inicio).toLocaleString("pt-BR") : "—"}
+                      {fmtDataHoraBR(p.data_inicio)}
                     </td>
                     <td className="px-4 py-2">
-                      {p.data_fim ? new Date(p.data_fim).toLocaleString("pt-BR") : "—"}
+                      {fmtDataHoraBR(p.data_fim)}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <button

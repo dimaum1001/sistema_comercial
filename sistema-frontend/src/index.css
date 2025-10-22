@@ -1,3 +1,111 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    @apply min-h-screen bg-slate-100 font-sans text-slate-800 antialiased;
+  }
+
+  a {
+    @apply text-blue-600 underline-offset-4 transition hover:text-blue-700 hover:underline;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-slate-900 font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .page-container {
+    @apply flex flex-col gap-6;
+  }
+
+  .card {
+    @apply rounded-2xl border border-slate-100 bg-white shadow-sm;
+  }
+
+  .card-soft {
+    @apply card bg-white/80 backdrop-blur-sm;
+  }
+
+  .card-section {
+    @apply border-t border-slate-100 px-6 py-4;
+  }
+
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-[0.3em] text-slate-500;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-primary {
+    @apply btn bg-blue-600 text-white shadow-sm hover:bg-blue-700 focus-visible:outline-blue-600;
+  }
+
+  .btn-secondary {
+    @apply btn border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 focus-visible:outline-slate-500;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-slate-600 hover:bg-slate-100 focus-visible:outline-slate-400;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-600;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200;
+  }
+
+  .textarea {
+    @apply input min-h-[120px] resize-y;
+  }
+
+  .select {
+    @apply input pr-10;
+  }
+
+  .input-group {
+    @apply flex w-full flex-col gap-1.5;
+  }
+
+  .input-label {
+    @apply text-sm font-medium text-slate-600;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide;
+  }
+
+  .badge-soft {
+    @apply badge bg-slate-100 text-slate-700;
+  }
+
+  .table-shell {
+    @apply card overflow-hidden;
+  }
+
+  .table-shell table {
+    @apply min-w-full divide-y divide-slate-200;
+  }
+
+  .table-shell thead {
+    @apply bg-slate-50;
+  }
+
+  .table-shell th {
+    @apply px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .table-shell td {
+    @apply px-6 py-4 align-middle text-sm text-slate-600;
+  }
+}

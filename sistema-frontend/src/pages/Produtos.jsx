@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
-import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiArrowLeft, FiBox, FiFilter, FiXCircle } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiArrowLeft, FiBox } from 'react-icons/fi'
+import { Page, Card, EmptyState } from '../components/ui'
+import { classNames } from '../utils/classNames'
 
 function useDebounced(value, delay = 300) {
   const [currentValue, setCurrentValue] = useState(value)
@@ -123,7 +125,7 @@ export default function Produtos() {
     return null
   }, [])
 
-    const handleFilterChange = (field, value) => {
+  const handleFilterChange = (field, value) => {
     setFilters((prev) => ({ ...prev, [field]: value }))
     setPage(1)
   }
@@ -156,7 +158,7 @@ export default function Produtos() {
     (filters.precoMax !== '' ? 1 : 0) +
     (filters.ativo !== 'all' ? 1 : 0)
 
-const fetchProdutos = useCallback(async () => {
+  const fetchProdutos = useCallback(async () => {
     const token = localStorage.getItem('token')
 
     if (!token) {
@@ -312,244 +314,188 @@ const fetchProdutos = useCallback(async () => {
     setPage(1)
   }
 
+  const headerActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+        <span>Mostrar</span>
+        <select value={pageSize} onChange={handlePageSizeChange} className="select h-9 w-24">
+          {PAGE_SIZE_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <span>por pagina</span>
+      </div>
+      <button type="button" onClick={() => navigate('/dashboard')} className="btn-secondary">
+        <FiArrowLeft className="h-4 w-4" />
+        Voltar
+      </button>
+      <button type="button" onClick={() => navigate('/produtos/novo')} className="btn-primary">
+        <FiPlus className="h-4 w-4" />
+        Novo produto
+      </button>
+    </div>
+  )
+
+  const messageTone =
+    message?.tipo === 'erro'
+      ? 'border-rose-200 bg-rose-50 text-rose-700'
+      : message?.tipo === 'info'
+      ? 'border-blue-200 bg-blue-50 text-blue-700'
+      : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="h-12 w-12 bg-blue-200 rounded-full mb-4"></div>
-          <div className="h-4 w-32 bg-blue-200 rounded"></div>
+      <Page
+        title="Produtos"
+        subtitle="Gerencie o catalogo de itens e acompanhe estoque e precos."
+        icon={<FiBox className="h-5 w-5" />}
+        actions={headerActions}
+      >
+        <div className="flex min-h-[320px] items-center justify-center rounded-3xl border border-blue-100 bg-white/80 shadow-sm">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-12 w-12 animate-pulse rounded-full bg-blue-200" />
+            <div className="h-4 w-32 animate-pulse rounded-full bg-blue-200" />
+          </div>
         </div>
-      </div>
+      </Page>
     )
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-3">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <FiBox /> Produtos Cadastrados
-        </h2>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Mostrar</label>
-            <select
-              value={pageSize}
-              onChange={handlePageSizeChange}
-              className="border border-gray-300 rounded-md text-sm px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {PAGE_SIZE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            <span className="text-sm text-gray-600">por pagina</span>
-          </div>
-
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
-            type="button"
-          >
-            <FiArrowLeft className="mr-2" />
-            Voltar
-          </button>
-          <button
-            onClick={() => navigate('/produtos/novo')}
-            className="flex items-center bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-            type="button"
-          >
-            <FiPlus className="mr-2" />
-            Novo Produto
-          </button>
-        </div>
-      </div>
-
+    <Page
+      title="Produtos"
+      subtitle="Gerencie o catalogo de itens e acompanhe estoque e precos."
+      icon={<FiBox className="h-5 w-5" />}
+      actions={headerActions}
+    >
       {message ? (
-        <div
-          className={`mb-4 p-3 rounded border ${
-            message.tipo === 'erro'
-              ? 'bg-red-100 border-red-300 text-red-700'
-              : message.tipo === 'info'
-              ? 'bg-blue-100 border-blue-300 text-blue-700'
-              : 'bg-green-100 border-green-300 text-green-700'
-          }`}
-        >
+        <div className={classNames('rounded-2xl border px-4 py-3 text-sm shadow-sm', messageTone)}>
           {message.texto}
         </div>
       ) : null}
 
-      <div className="mb-6 relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <FiSearch className="text-gray-400" />
+      <Card className="p-4 sm:p-6">
+        <div className="relative">
+          <FiSearch className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Pesquisar produtos por nome, categoria, fornecedor, marca ou codigo"
+            className="input pl-12"
+            value={searchTerm}
+            onChange={(event) => {
+              setSearchTerm(event.target.value)
+              setPage(1)
+            }}
+          />
         </div>
-        <input
-          type="text"
-          placeholder="Pesquisar produtos por nome, categoria, fornecedor, marca ou código..."
-          className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value)
-            setPage(1)
-          }}
-        />
-      </div>
+      </Card>
 
       {produtos.length === 0 ? (
-        <div className="bg-white p-8 rounded-xl shadow-sm text-center">
-          <p className="text-gray-600 mb-4">
-            {searchTerm
-              ? 'Nenhum produto encontrado para a pesquisa nesta pagina.'
-              : 'Nenhum produto cadastrado ainda.'}
-          </p>
-          <button
-            onClick={() => navigate('/produtos/novo')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-            type="button"
-          >
-            Cadastrar Primeiro Produto
-          </button>
-        </div>
+        <EmptyState
+          title={searchTerm ? 'Nenhum produto encontrado' : 'Nenhum produto cadastrado'}
+          description={
+            searchTerm
+              ? 'Ajuste os filtros ou tente buscar por outro termo.'
+              : 'Cadastre o primeiro produto para iniciar o controle de estoque.'
+          }
+          actions={
+            searchTerm ? (
+              <button type="button" onClick={() => setSearchTerm('')} className="btn-secondary">
+                Limpar busca
+              </button>
+            ) : (
+              <button type="button" onClick={() => navigate('/produtos/novo')} className="btn-primary">
+                <FiPlus className="h-4 w-4" />
+                Cadastrar produto
+              </button>
+            )
+          }
+        />
       ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="table-shell">
           <div className="overflow-x-auto">
-            <table className="min-w-[1200px] divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-6 pr-24 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Codigo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nome
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fornecedor
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Custo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Custo Médio
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Preco de Venda
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estoque
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unidade
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Categoria
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Marca
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Localizacao
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cadastrado em
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Atualizado em
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Produto</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Fornecedor</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Precos</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Estoque</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Datas</th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Acoes</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {produtos.map((produto) => (
-                  <tr
-                    key={produto.id}
-                    className="group relative hover:bg-gray-50 transition-colors focus-within:bg-gray-50"
-                  >
-                    <td
-                      className="relative px-6 py-4 pr-24 text-sm text-gray-700"
-                      title={produto.codigo_barras ? `Cod. barras: ${produto.codigo_barras}` : 'Sem codigo de barras'}
-                    >
-                      <div className="flex flex-col gap-1 max-w-[180px]">
-                        <span className="font-semibold text-gray-900 leading-none">
-                          {produto.codigo_produto || '-'}
-                        </span>
-                        <span className="text-xs text-gray-500 truncate leading-tight">
-                          {produto.codigo_barras ? `Barras: ${produto.codigo_barras}` : 'Sem codigo de barras'}
-                        </span>
-                      </div>
-                      <div
-                        className="invisible opacity-0 absolute right-4 top-1/2 -translate-y-1/2 transform transition duration-150 ease-out group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
-                      >
-                        <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 shadow-md">
-                          <button
-                            onClick={() => navigate(`/produtos/editar/${produto.id}`)}
-                            className="rounded-full p-1.5 text-blue-600 transition hover:bg-blue-50 hover:text-blue-800"
-                            title="Editar"
-                            type="button"
-                            aria-label={`Editar ${produto?.nome || 'produto'}`}
-                          >
-                            <FiEdit2 />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(produto.id)}
-                            className="rounded-full p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-800"
-                            title="Excluir"
-                            type="button"
-                            aria-label={`Excluir ${produto?.nome || 'produto'}`}
-                          >
-                            <FiTrash2 />
-                          </button>
+                  <tr key={produto.id} className="transition hover:bg-slate-50 focus-within:bg-slate-50">
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-600">
+                          {(produto.nome?.charAt(0) || '?').toUpperCase()}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="font-semibold text-slate-900">{produto.nome || '-'}</div>
+                          <div className="text-xs uppercase tracking-wide text-slate-400 flex flex-wrap gap-2">
+                            <span>Codigo: {produto.codigo_produto || '-'}</span>
+                            <span>Categoria: {produto?.categoria?.nome || '-'}</span>
+                            <span>Marca: {produto.marca || '-'}</span>
+                            <span>Local: {produto.localizacao || '-'}</span>
+                            <span>Barras: {produto.codigo_barras || '-'}</span>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" title={produto.nome || '-'}>
-                      {produto.nome || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600" title={
-                      produto?.fornecedor?.nome || produto?.fornecedor_obj?.nome || produto?.fornecedor || '-'
-                    }>
+                    <td className="px-6 py-4 text-sm text-slate-600">
                       {produto?.fornecedor?.nome || produto?.fornecedor_obj?.nome || produto?.fornecedor || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {fmtBRL(Number(produto.custo))}
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      <div className="space-y-1">
+                        <div>Custo: {fmtBRL(Number(produto.custo))}</div>
+                        <div>Custo médio: {fmtBRL(Number(produto.custo_medio ?? produto.custo))}</div>
+                        <div>Venda: <span className="font-semibold text-slate-900">{fmtBRL(Number(produto.preco_venda))}</span></div>
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {fmtBRL(Number(produto.custo_medio ?? produto.custo))}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {fmtBRL(Number(produto.preco_venda))}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4">
                       <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        className={classNames(
+                          'badge',
                           (produto.estoque ?? 0) <= 0
-                            ? 'bg-red-100 text-red-800'
+                            ? 'bg-rose-100 text-rose-700'
                             : (produto.estoque ?? 0) < 10
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-green-100 text-green-800'
-                        }`}
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        )}
                       >
-                        {produto.estoque ?? 0} un.
+                        {produto.estoque ?? 0} {produto?.unidade_medida?.sigla || 'UN'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {produto?.unidade_medida?.sigla || "-"}
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      <div className="space-y-1">
+                        <div>Cadastrado: {produto.criado_em ? new Date(produto.criado_em).toLocaleDateString('pt-BR') : '-'}</div>
+                        <div>Atualizado: {produto.atualizado_em ? new Date(produto.atualizado_em).toLocaleDateString('pt-BR') : '-'}</div>
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {produto?.categoria?.nome || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {produto.marca || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {produto.localizacao || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {produto.criado_em ? new Date(produto.criado_em).toLocaleDateString('pt-BR') : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {produto.atualizado_em
-                        ? new Date(produto.atualizado_em).toLocaleDateString('pt-BR')
-                        : '-'}
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/produtos/editar/${produto.id}`)}
+                          className="btn-ghost h-9 w-9 rounded-full p-0 text-blue-600 hover:text-blue-700"
+                          title="Editar"
+                        >
+                          <FiEdit2 />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(produto.id)}
+                          className="btn-ghost h-9 w-9 rounded-full p-0 text-rose-600 hover:text-rose-700"
+                          title="Excluir"
+                        >
+                          <FiTrash2 />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -559,47 +505,41 @@ const fetchProdutos = useCallback(async () => {
         </div>
       )}
 
-      <div className="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white px-6 py-3 rounded-b-xl shadow-sm">
-        <div className="text-sm text-gray-500">
-          Página <span className="font-medium">{currentPage}</span>{' '}
+      <Card className="flex flex-col gap-3 px-4 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          Pagina <span className="font-semibold text-slate-900">{currentPage}</span>{' '}
           {produtos.length > 0 && typeof totalCount === 'number' ? (
             <>
-              mostrando <span className="font-medium">{rangeStart}-{rangeEnd}</span>{' '}
-              de <span className="font-medium">{totalCount}</span> produtos
+              mostrando <span className="font-semibold text-slate-900">{rangeStart}-{rangeEnd}</span>{' '}
+              de <span className="font-semibold text-slate-900">{totalCount}</span> produtos
             </>
           ) : (
-            <>mostrando <span className="font-medium">{produtos.length}</span> produtos</>
+            <>mostrando <span className="font-semibold text-slate-900">{produtos.length}</span> produtos</>
           )}{' '}
-          ({pageSize} por página) {' | '}
-          <span className="font-medium">
+          ({pageSize} por pagina) |{' '}
+          <span className="font-semibold text-slate-900">
             Total geral: {typeof totalCount === 'number' ? totalCount : '--'}
           </span>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex gap-2">
           <button
+            type="button"
             onClick={handlePrev}
             disabled={disablePrev}
-            className={`px-3 py-1 rounded-md ${
-              disablePrev
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 transition'
-            }`}
+            className="btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
           >
             Anterior
           </button>
           <button
+            type="button"
             onClick={handleNext}
             disabled={disableNext}
-            className={`px-3 py-1 rounded-md ${
-              disableNext
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700 transition'
-            }`}
+            className="btn-primary disabled:cursor-not-allowed disabled:bg-blue-300"
           >
             Proxima
           </button>
         </div>
-      </div>
-    </div>
+      </Card>
+    </Page>
   )
 }
