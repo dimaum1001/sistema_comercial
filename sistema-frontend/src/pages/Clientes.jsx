@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
-import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch, FiUsers } from 'react-icons/fi'
+import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch, FiUsers, FiChevronDown } from 'react-icons/fi'
 import { PageHeader, EmptyState } from '../components/ui'
 
 function useDebounced(value, delay = 300) {
@@ -203,19 +203,22 @@ const handlePageSizeChange = (e) => {
 
   const headerActions = (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-        <span>Mostrar</span>
-        <select
-          value={pageSize}
-          onChange={handlePageSizeChange}
-          className="select h-9 w-24"
-        >
-          <option value={10}>10</option>
-          <option value={25}>25</option>
-          <option value={50}>50</option>
-          <option value={100}>100</option>
-        </select>
-        <span>por pagina</span>
+      <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm text-slate-600 shadow-sm">
+        <span className="font-medium text-slate-500">Mostrar</span>
+        <div className="relative">
+          <select
+            value={pageSize}
+            onChange={handlePageSizeChange}
+            className="select h-9 w-32 appearance-none rounded-full bg-white px-4 pr-10 text-center font-semibold text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <FiChevronDown className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-slate-400" />
+        </div>
+        <span className="font-medium text-slate-500">por pagina</span>
       </div>
 
       <button

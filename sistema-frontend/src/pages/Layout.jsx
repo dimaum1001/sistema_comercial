@@ -103,6 +103,17 @@ export default function Layout() {
   const isAdmin = String(usuario?.tipo || '').toLowerCase() === 'admin';
   const cargo = usuario?.tipo ? usuario.tipo.toUpperCase() : 'USUARIO';
 
+  const breadcrumbPath = useMemo(() => {
+    const segments = location.pathname.split('/').filter(Boolean);
+    const filtered = segments.filter((segment) => {
+      if (/^\d+$/.test(segment) && segment.length > 4) return false;
+      if (/^[0-9a-fA-F-]{12,}$/.test(segment)) return false;
+      return true;
+    });
+    if (!filtered.length) return 'dashboard';
+    return filtered.join(' / ');
+  }, [location.pathname]);
+
   const navSections = useMemo(() => {
     const sections = [
       {
@@ -358,9 +369,7 @@ export default function Layout() {
             </button>
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">Voce esta em</p>
-              <p className="text-sm font-semibold text-slate-800">
-                {location.pathname.replace('/', '') || 'dashboard'}
-              </p>
+              <p className="text-sm font-semibold text-slate-800">{breadcrumbPath}</p>
             </div>
           </div>
 

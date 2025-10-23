@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch, FiTruck } from 'react-icons/fi';
+import { FiUserPlus, FiArrowLeft, FiEdit, FiTrash2, FiSearch, FiTruck, FiChevronDown } from 'react-icons/fi';
 import { Page, EmptyState, Card } from '../components/ui';
 
 function useDebounced(value, delay = 300) {
@@ -15,9 +15,11 @@ function useDebounced(value, delay = 300) {
   return currentValue;
 }
 
-function formatarDocumento(valor) {
+function maskCpfCnpj(valor) {
   if (!valor) return 'Nao informado';
-  const digits = String(valor).replace(/[^0-9]/g, '');
+  const str = String(valor);
+  if (str.includes('*')) return str;
+  const digits = str.replace(/[^0-9]/g, '');
   if (digits.length === 11) return `***.***.***-${digits.slice(-2)}`;
   if (digits.length === 14) return `**.***.***/****-${digits.slice(-2)}`;
   if (digits.length > 4) {
@@ -27,13 +29,17 @@ function formatarDocumento(valor) {
   return '*'.repeat(Math.max(0, digits.length - 1)) + digits.slice(-1);
 }
 
-function formatarTelefone(valor) {
+function maskTelefone(valor) {
   if (!valor) return 'Nao informado';
-  const n = String(valor).replace(/\D/g, '');
-  if (n.length === 10) return n.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-  if (n.length === 11) return n.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-  if (n.length === 8) return n.replace(/(\d{4})(\d{4})/, '$1-$2');
-  return n;
+  const str = String(valor);
+  if (str.includes('*')) return str;
+  if (/[()\- ]/.test(str) && str.replace(/\D/g, '').length >= 8) return str;
+  const digits = str.replace(/\D/g, '');
+  if (digits.length === 11) return digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  if (digits.length === 10) return digits.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+  if (digits.length === 9) return digits.replace(/(\d{5})(\d{4})/, '$1-$2');
+  if (digits.length === 8) return digits.replace(/(\d{4})(\d{4})/, '$1-$2');
+  return digits || str;
 }
 
 export default function Fornecedores() {
@@ -148,16 +154,23 @@ export default function Fornecedores() {
 
   const headerActions = (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-        <span>Mostrar</span>
-        <select value={pageSize} onChange={handlePageSizeChange} className="select h-9 w-24">
-          {[10, 25, 50, 100].map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-        <span>por pagina</span>
+      <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm text-slate-600 shadow-sm">
+        <span className="font-medium text-slate-500">Mostrar</span>
+        <div className="relative">
+          <select
+            value={pageSize}
+            onChange={handlePageSizeChange}
+            className="select h-9 w-32 appearance-none rounded-full bg-white px-4 pr-10 text-center font-semibold text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          >
+            {[10, 25, 50, 100].map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <FiChevronDown className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-slate-400" />
+        </div>
+        <span className="font-medium text-slate-500">por pagina</span>
       </div>
       <button type="button" onClick={() => navigate('/dashboard')} className="btn-secondary">
         <FiArrowLeft className="h-4 w-4" />
@@ -291,8 +304,8 @@ export default function Fornecedores() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600">{formatarDocumento(fornecedor.cnpj_cpf)}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600">{formatarTelefone(fornecedor.telefone)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{maskCpfCnpj(fornecedor.cnpj_cpf)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{maskTelefone(fornecedor.telefone)}</td>
                       <td className="px-6 py-4 text-sm text-slate-600">
                         {fornecedor.criado_em
                           ? new Date(fornecedor.criado_em).toLocaleDateString('pt-BR')

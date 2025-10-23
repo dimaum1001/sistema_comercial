@@ -32,6 +32,13 @@ function onlyDigits(s) {
 
 const HISTORICO_PAGE_SIZE = 10;
 
+const FORMA_PAGAMENTO_OPCOES = [
+  { value: "dinheiro", label: "Dinheiro" },
+  { value: "credito", label: "Cartao de Credito" },
+  { value: "debito", label: "Cartao de Debito" },
+  { value: "pix", label: "PIX" },
+];
+
 const toCents = (value) => Math.round(Number(value || 0) * 100);
 const subtotalItemToCents = (item) => Math.round(item.preco_unit * item.quantidade * 100);
 const fromCents = (cents) => cents / 100;
@@ -1177,67 +1184,102 @@ function PagamentosEditor({
   }
 
   return (
-    <div>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-[11px] text-gray-500 mb-1">
-        <div>Forma</div>
-        <div>Valor</div>
-        <div>Qtd. vezes</div>
-        <div>Vencimento</div>
-        <div></div>
-      </div>
-
+    <div className="space-y-4">
       {pagamentos.map((p, idx) => (
-        <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2 items-center">
-          <select
-            className="text-sm p-2 border border-gray-300 rounded-lg"
-            value={p.forma_pagamento}
-            onChange={(e) => atualizarPagamento(idx, "forma_pagamento", e.target.value)}
-          >
-            <option value="dinheiro">Dinheiro</option>
-            <option value="credito">Cartao de Credito</option>
-            <option value="debito">Cartao de Debito</option>
-            <option value="pix">PIX</option>
-          </select>
+        <div
+          key={idx}
+          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-400">
+                Pagamento {idx + 1}
+              </p>
+              <p className="text-sm font-semibold text-slate-700">
+                {idx === 0 ? "Principal" : "Complementar"}
+              </p>
+            </div>
+            {idx > 0 ? (
+              <button
+                type="button"
+                onClick={() => setPagamentos((prev) => prev.filter((_, i) => i !== idx))}
+                className="btn-ghost h-9 rounded-full px-3 text-sm text-rose-600 hover:text-rose-700"
+                title="Remover pagamento"
+              >
+                <FiTrash2 className="mr-1 h-4 w-4" />
+                Remover
+              </button>
+            ) : (
+              <span className="text-xs text-slate-400">Valor ajustado automaticamente</span>
+            )}
+          </div>
 
-          <input
-            type="text"
-            className="text-sm p-2 border border-gray-300 rounded-lg text-right"
-            value={p.valor}
-            onChange={(e) => atualizarPagamento(idx, "valor", e.target.value)}
-          />
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex flex-col gap-1.5 lg:col-span-1">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Forma
+              </span>
+              <select
+                className="select h-11 w-full appearance-none pr-10 text-sm font-medium text-slate-700"
+                value={p.forma_pagamento}
+                onChange={(e) => atualizarPagamento(idx, "forma_pagamento", e.target.value)}
+              >
+                {FORMA_PAGAMENTO_OPCOES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <input
-            type="number"
-            min="1"
-            className="text-sm p-2 border border-gray-300 rounded-lg"
-            value={p.parcelas}
-            onChange={(e) => atualizarPagamento(idx, "parcelas", e.target.value)}
-            title="Quantidade de parcelas (1 = a vista)"
-          />
+            <div className="flex flex-col gap-1.5 lg:col-span-1">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Valor
+              </span>
+              <input
+                type="text"
+                className="input h-11 text-right"
+                value={p.valor}
+                onChange={(e) => atualizarPagamento(idx, "valor", e.target.value)}
+              />
+            </div>
 
-          <input
-            type="date"
-            className="text-sm p-2 border border-gray-300 rounded-lg"
-            value={p.data_vencimento}
-            onChange={(e) => atualizarPagamento(idx, "data_vencimento", e.target.value)}
-          />
+            <div className="flex flex-col gap-1.5 lg:col-span-1">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Parcelas
+              </span>
+              <input
+                type="number"
+                min="1"
+                className="input h-11"
+                value={p.parcelas}
+                onChange={(e) => atualizarPagamento(idx, "parcelas", e.target.value)}
+                title="Quantidade de parcelas (1 = a vista)"
+              />
+            </div>
 
-          {idx > 0 ? (
-            <button
-              onClick={() => setPagamentos((prev) => prev.filter((_, i) => i !== idx))}
-              className="text-red-600 hover:text-red-800 justify-self-start"
-              title="Remover"
-            >
-              <FiTrash2 />
-            </button>
-          ) : (
-            <div />
-          )}
+            <div className="flex flex-col gap-1.5 lg:col-span-1">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Vencimento
+              </span>
+              <input
+                type="date"
+                className="input h-11"
+                value={p.data_vencimento}
+                onChange={(e) => atualizarPagamento(idx, "data_vencimento", e.target.value)}
+              />
+            </div>
+          </div>
         </div>
       ))}
 
-      <button type="button" onClick={adicionarPagamento} className="text-blue-600 text-xs">
-        + Adicionar pagamento
+      <button
+        type="button"
+        onClick={adicionarPagamento}
+        className="btn-ghost h-11 w-full justify-center gap-2 rounded-full border border-dashed border-blue-300 text-sm font-semibold text-blue-600 hover:border-blue-400 hover:text-blue-700 sm:w-auto"
+      >
+        <FiPlus className="h-4 w-4" />
+        Adicionar pagamento
       </button>
     </div>
   );

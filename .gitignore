@@ -1,9 +1,25 @@
-# Environment variables
+# Environment variables & secrets
 .env
 .env.*
-!.env.example
-!.env.sample
-!.env.*.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
+!**/.env.*.example
+*.env.local
+*.env.development
+*.env.production
+*.env.test
+*.env.testing
+app/.env
+sistema-frontend/.env
+sistema-frontend/.env.*
+secrets/
+certs/
+*.pem
+*.key
+*.crt
+*.pfx
 
 # Python caches and artifacts
 __pycache__/

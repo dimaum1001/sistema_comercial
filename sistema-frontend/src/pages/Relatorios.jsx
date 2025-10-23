@@ -89,6 +89,24 @@ export default function Relatorios() {
   const [erro, setErro] = useState('')
   const [estoqueLoadedOnce, setEstoqueLoadedOnce] = useState(false)
 
+  const carregarOutrosRelatorios = useCallback(async (p) => {
+    const useP = p || periodo
+    try {
+      const [produtosRes, rankingRes] = await Promise.allSettled([
+        api.get('/relatorios/produtos-mais-vendidos', { params: useP }),
+        api.get('/relatorios/ranking-clientes', { params: useP }),
+      ])
+      if (produtosRes.status === 'fulfilled') {
+        setProdutosMaisVendidos(Array.isArray(produtosRes.value.data) ? produtosRes.value.data : [])
+      }
+      if (rankingRes.status === 'fulfilled') {
+        setRankingClientes(Array.isArray(rankingRes.value.data) ? rankingRes.value.data : [])
+      }
+    } catch (e) {
+      console.error('Erro ao carregar relatorios adicionais:', e)
+    }
+  }, [periodo])
+
   useEffect(() => {
     const t = search.get('tab') || 'vendas-resumo'
     setTab(t)
@@ -104,6 +122,7 @@ export default function Relatorios() {
     ;(async () => {
       await carregarResumoVendas({ inicio, fim })
       await fetchVendasDetalhadas({ page: 1, perPage: vdPerPage, periodo: { inicio, fim } })
+      await carregarOutrosRelatorios({ inicio, fim })
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -116,6 +135,12 @@ export default function Relatorios() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  useEffect(() => {
+    if (tab === 'produtos' || tab === 'ranking') {
+      carregarOutrosRelatorios()
+    }
+  }, [tab, carregarOutrosRelatorios])
 
   // -------- carregadores --------
   const carregarResumoVendas = async (p) => {
@@ -207,24 +232,6 @@ export default function Relatorios() {
 
     return resultados
   }, [])
-
-  const carregarOutrosRelatorios = async (p) => {
-    const useP = p || periodo
-    try {
-      const [produtosRes, rankingRes] = await Promise.allSettled([
-        api.get('/relatorios/produtos-mais-vendidos', { params: useP }),
-        api.get('/relatorios/ranking-clientes', { params: useP })
-      ])
-      if (produtosRes.status === 'fulfilled') {
-        setProdutosMaisVendidos(Array.isArray(produtosRes.value.data) ? produtosRes.value.data : [])
-      }
-      if (rankingRes.status === 'fulfilled') {
-        setRankingClientes(Array.isArray(rankingRes.value.data) ? rankingRes.value.data : [])
-      }
-    } catch (e) {
-      console.error('Erro ao carregar relatorios adicionais:', e)
-    }
-  }
 
   const aplicarPeriodo = async () => {
     setLoading(true)
