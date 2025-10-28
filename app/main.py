@@ -96,24 +96,36 @@ app.add_middleware(
 def preflight_handler(full_path: str):
     return Response(status_code=204)
 
-# >>> CORS por último <<<
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173",
-)
-ALLOWED_ORIGIN_REGEX = os.getenv(
-    "ALLOWED_ORIGIN_REGEX",
-    r"https://.*\.vercel\.app",
-)
+# >>> CORS por ultimo <<<
 
-allowed_list = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+def _split_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item.strip().rstrip("/") for item in value.split(",") if item.strip()]
+
+
+allowed_origins = set(_split_csv(settings.CORS_ALLOWED_ORIGINS))
+legacy_env = os.getenv("ALLOWED_ORIGINS")
+allowed_origins.update(_split_csv(legacy_env))
+allowed_origins.update(_split_csv(settings.FRONTEND_URLS))
+
+if settings.FRONTEND_URL:
+    allowed_origins.add(settings.FRONTEND_URL.strip().rstrip("/"))
+
+render_external_url = os.getenv("RENDER_EXTERNAL_URL")
+if render_external_url:
+    allowed_origins.add(render_external_url.strip().rstrip("/"))
+
+allowed_list = sorted(allowed_origins)
+allowed_origin_regex = settings.CORS_ALLOWED_ORIGIN_REGEX or os.getenv("ALLOWED_ORIGIN_REGEX")
+
 print("CORS -> allow_origins:", allowed_list)
-print("CORS -> allow_origin_regex:", ALLOWED_ORIGIN_REGEX)
+print("CORS -> allow_origin_regex:", allowed_origin_regex)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_list,
-    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

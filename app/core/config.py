@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # URL de conexão com o banco de dados
     DATABASE_URL: str
 
+    # URLs permitidas para o frontend (CORS)
+    FRONTEND_URL: Optional[str] = None
+    FRONTEND_URLS: Optional[str] = None
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    CORS_ALLOWED_ORIGIN_REGEX: Optional[str] = r"https://.*\.vercel\.app"
+
     # JWT: use .env em produção; fallback temporário só para DEV
     SECRET_KEY: str = Field(default_factory=_gen_dev_secret_key)
 
