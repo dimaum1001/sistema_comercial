@@ -1,13 +1,14 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+import os
 
 from app.auth import auth_routes
 from app.core.config import settings
 from app.db.database import ensure_schema_integrity, engine
 from app.middleware.audit import AuditMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
-from app.models import models  # ensures models are imported
+from app.models import models  # garante o import dos models
 from app.routes import (
     auditoria_routes,
     categorias_routes,
@@ -29,6 +30,25 @@ from app.routes import (
 
 app = FastAPI()
 
+# ──────────────────────────────────────────────────────────────────────────────
+# CORS (primeiro middleware) - lê do .env: ALLOWED_ORIGINS=dominio1,dominio2,...
+# ──────────────────────────────────────────────────────────────────────────────
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173"
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Total-Count", "Content-Range"],
+)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Middlewares customizados (depois do CORS)
+# ──────────────────────────────────────────────────────────────────────────────
 app.add_middleware(
     RateLimitMiddleware,
     limit=settings.RATE_LIMIT_REQUESTS,
@@ -41,20 +61,9 @@ app.add_middleware(
     cleanup_interval_seconds=settings.AUDIT_CLEANUP_INTERVAL_SECONDS,
 )
 
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["X-Total-Count", "Content-Range"],
-)
-
+# ──────────────────────────────────────────────────────────────────────────────
+# Rotas
+# ──────────────────────────────────────────────────────────────────────────────
 app.include_router(auth_routes.router, prefix="/auth")
 app.include_router(clientes_routes.router)
 app.include_router(produtos_routes.router)
@@ -73,7 +82,9 @@ app.include_router(auditoria_routes.router)
 app.include_router(unidades_medida_routes.router)
 app.include_router(direitos_titulares_routes.router)
 
-
+# ──────────────────────────────────────────────────────────────────────────────
+# Eventos / Healthcheck
+# ──────────────────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def testar_conexao_supabase():
     try:
@@ -82,8 +93,12 @@ def testar_conexao_supabase():
             resultado = conn.execute(text("SELECT now()"))
             print("OK. Conectado ao Supabase em", resultado.scalar())
     except Exception as exc:
+        # Evite derrubar o processo só por log; Render faz restart automático
         print("ERRO ao conectar ao Supabase:", exc)
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
 
 @app.get("/")
 def read_root():
