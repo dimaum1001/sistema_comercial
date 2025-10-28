@@ -12,6 +12,12 @@ SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 def ensure_schema_integrity() -> None:
     """Ensure essential columns exist when running without migrations."""
+    # Garante que todos os modelos estejam registrados antes de rodar create_all
+    from app.models import models as _models  # noqa: F401
+
+    # Cria as tabelas que ainda nao existem (novo cliente / novo banco)
+    Base.metadata.create_all(bind=engine)
+
     migrations = (
         (
             "clientes",
