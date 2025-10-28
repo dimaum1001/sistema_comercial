@@ -1,5 +1,6 @@
 ﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from sqlalchemy import text
 import os
 
@@ -31,20 +32,37 @@ from app.routes import (
 app = FastAPI()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CORS (primeiro middleware) - lê do .env: ALLOWED_ORIGINS=dominio1,dominio2,...
+# CORS (primeiro middleware)
+# ALLOWED_ORIGINS: lista separada por vírgula (sem espaços)
+# ALLOWED_ORIGIN_REGEX: regex opcional (ex.: permitir qualquer *.vercel.app)
 # ──────────────────────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
     "http://localhost:5173,http://127.0.0.1:5173"
 )
+ALLOWED_ORIGIN_REGEX = os.getenv(
+    "ALLOWED_ORIGIN_REGEX",
+    r"https://.*\.vercel\.app"
+)
+
+allowed_list = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+print("CORS -> allow_origins:", allowed_list)
+print("CORS -> allow_origin_regex:", ALLOWED_ORIGIN_REGEX)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()],
+    allow_origins=allowed_list,            # domínios explícitos
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,  # e qualquer *.vercel.app
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Total-Count", "Content-Range"],
 )
+
+# Opcional, mas ajuda a garantir o preflight mesmo se algum middleware/rota não tratar OPTIONS
+@app.options("/{full_path:path}")
+def preflight_handler(full_path: str):
+    return Response(status_code=204)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Middlewares customizados (depois do CORS)
@@ -93,7 +111,6 @@ def testar_conexao_supabase():
             resultado = conn.execute(text("SELECT now()"))
             print("OK. Conectado ao Supabase em", resultado.scalar())
     except Exception as exc:
-        # Evite derrubar o processo só por log; Render faz restart automático
         print("ERRO ao conectar ao Supabase:", exc)
 
 @app.get("/healthz")
