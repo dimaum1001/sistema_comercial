@@ -32,54 +32,6 @@ from app.routes import (
 app = FastAPI()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CORS (primeiro middleware)
-# ALLOWED_ORIGINS: lista separada por vírgula (sem espaços)
-# ALLOWED_ORIGIN_REGEX: regex opcional (ex.: permitir qualquer *.vercel.app)
-# ──────────────────────────────────────────────────────────────────────────────
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173"
-)
-ALLOWED_ORIGIN_REGEX = os.getenv(
-    "ALLOWED_ORIGIN_REGEX",
-    r"https://.*\.vercel\.app"
-)
-
-allowed_list = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
-print("CORS -> allow_origins:", allowed_list)
-print("CORS -> allow_origin_regex:", ALLOWED_ORIGIN_REGEX)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_list,            # domínios explícitos
-    allow_origin_regex=ALLOWED_ORIGIN_REGEX,  # e qualquer *.vercel.app
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["X-Total-Count", "Content-Range"],
-)
-
-# Opcional, mas ajuda a garantir o preflight mesmo se algum middleware/rota não tratar OPTIONS
-@app.options("/{full_path:path}")
-def preflight_handler(full_path: str):
-    return Response(status_code=204)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Middlewares customizados (depois do CORS)
-# ──────────────────────────────────────────────────────────────────────────────
-app.add_middleware(
-    RateLimitMiddleware,
-    limit=settings.RATE_LIMIT_REQUESTS,
-    window=settings.RATE_LIMIT_WINDOW_SECONDS,
-)
-app.add_middleware(
-    AuditMiddleware,
-    salt=settings.SECRET_KEY,
-    retention_days=settings.AUDIT_RETENTION_DAYS,
-    cleanup_interval_seconds=settings.AUDIT_CLEANUP_INTERVAL_SECONDS,
-)
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Rotas
 # ──────────────────────────────────────────────────────────────────────────────
 app.include_router(auth_routes.router, prefix="/auth")
@@ -120,3 +72,50 @@ def healthz():
 @app.get("/")
 def read_root():
     return {"mensagem": "Sistema funcionando!"}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Middlewares (ordem importa! O ÚLTIMO adicionado roda primeiro)
+# 1) Middlewares customizados (internos)
+# 2) CORS por ÚLTIMO (mais externo) para sempre anexar os headers,
+#    mesmo quando houver exceção interna.
+# ──────────────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    RateLimitMiddleware,
+    limit=settings.RATE_LIMIT_REQUESTS,
+    window=settings.RATE_LIMIT_WINDOW_SECONDS,
+)
+app.add_middleware(
+    AuditMiddleware,
+    salt=settings.SECRET_KEY,
+    retention_days=settings.AUDIT_RETENTION_DAYS,
+    cleanup_interval_seconds=settings.AUDIT_CLEANUP_INTERVAL_SECONDS,
+)
+
+# Preflight genérico (garante 204 para qualquer OPTIONS)
+@app.options("/{full_path:path}")
+def preflight_handler(full_path: str):
+    return Response(status_code=204)
+
+# >>> CORS por último <<<
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173",
+)
+ALLOWED_ORIGIN_REGEX = os.getenv(
+    "ALLOWED_ORIGIN_REGEX",
+    r"https://.*\.vercel\.app",
+)
+
+allowed_list = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+print("CORS -> allow_origins:", allowed_list)
+print("CORS -> allow_origin_regex:", ALLOWED_ORIGIN_REGEX)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_list,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Total-Count", "Content-Range"],
+)
