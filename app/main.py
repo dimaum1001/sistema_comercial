@@ -2,6 +2,7 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from sqlalchemy import text
+from typing import List, Optional
 import os
 
 from app.auth import auth_routes
@@ -98,7 +99,7 @@ def preflight_handler(full_path: str):
 
 # >>> CORS por ultimo <<<
 
-def _split_csv(value: str | None) -> list[str]:
+def _split_csv(value: Optional[str]) -> List[str]:
     if not value:
         return []
     return [item.strip().rstrip("/") for item in value.split(",") if item.strip()]
