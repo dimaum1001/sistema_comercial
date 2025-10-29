@@ -10,7 +10,8 @@ contas a pagar existentes de forma paginada.
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import Body
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -26,8 +27,9 @@ from app.schemas.conta_pagar_schema import (
 router = APIRouter(prefix="/contas-pagar", tags=["Contas a Pagar"], dependencies=[Depends(get_current_user)])
 
 
+@router.get("", response_model=List[ContaPagarSchema])
 @router.get("/", response_model=List[ContaPagarSchema])
-def listar_contas(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)) -> List[models.ContaPagar]:
+def listar_contas(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200), db: Session = Depends(get_db)) -> List[models.ContaPagar]:
     """Retorna todas as contas a pagar cadastradas com suporte a paginaÃ§Ã£o."""
     return db.query(models.ContaPagar).offset(skip).limit(limit).all()
 
@@ -41,6 +43,7 @@ def obter_conta(conta_id: uuid.UUID, db: Session = Depends(get_db)) -> models.Co
     return conta
 
 
+@router.post("", response_model=ContaPagarSchema, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=ContaPagarSchema, status_code=status.HTTP_201_CREATED)
 def criar_conta(conta: ContaPagarCreate, db: Session = Depends(get_db)) -> models.ContaPagar:
     """Cria uma nova conta a pagar."""

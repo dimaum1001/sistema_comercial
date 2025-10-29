@@ -8,7 +8,7 @@ relacionados ao produto sÃ£o desativados e o campo ``preco_venda`` do produto
 Ã© atualizado.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
@@ -23,11 +23,12 @@ from app.schemas.produto_schema import PrecoProdutoCreate, PrecoProdutoOut
 router = APIRouter(prefix="/precos", tags=["PreÃ§os de Produtos"], dependencies=[Depends(get_current_user)])
 
 
+@router.get("", response_model=List[PrecoProdutoOut])
 @router.get("/", response_model=List[PrecoProdutoOut])
 def listar_precos(
     produto_id: Optional[UUID] = None,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db)
 ) -> List[PrecoProduto]:
     """Lista preÃ§os, podendo filtrar por produto e paginar os resultados."""
@@ -41,6 +42,7 @@ def listar_precos(
     return precos
 
 
+@router.post("", response_model=PrecoProdutoOut)
 @router.post("/", response_model=PrecoProdutoOut)
 def criar_preco(payload: PrecoProdutoCreate, db: Session = Depends(get_db)) -> PrecoProduto:
     """Cria um novo registro de preÃ§o para um produto, desativando preÃ§os ativos anteriores."""
