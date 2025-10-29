@@ -50,12 +50,14 @@ function formatarDataLocal(valor) {
   const toDate = (raw) => {
     if (raw instanceof Date) return raw;
     if (typeof raw === "string") {
-      const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+      const trimmed = raw.trim();
+      if (!trimmed) return null;
+      const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
       const hasOffset = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
 
       if (!hasOffset) {
         const match = normalized.match(
-          /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/
+          /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/
         );
         if (match) {
           const [, year, month, day, hour, minute, second = "0", fraction = "0"] = match;
@@ -70,16 +72,20 @@ function formatarDataLocal(valor) {
           );
           if (!Number.isNaN(localDate.getTime())) return localDate;
         }
+
+        const parsedLocal = new Date(normalized);
+        if (!Number.isNaN(parsedLocal.getTime())) return parsedLocal;
       }
 
-      const parsedNormalized = new Date(normalized);
-      if (!Number.isNaN(parsedNormalized.getTime())) return parsedNormalized;
+      const parsedIso = new Date(normalized);
+      if (!Number.isNaN(parsedIso.getTime())) return parsedIso;
 
       if (!hasOffset) {
         const parsedUtc = new Date(`${normalized}Z`);
         if (!Number.isNaN(parsedUtc.getTime())) return parsedUtc;
       }
     }
+
     const parsed = new Date(raw);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
@@ -87,7 +93,7 @@ function formatarDataLocal(valor) {
   const data = toDate(valor);
   if (!data) return String(valor);
 
-  const formatter = new Intl.DateTimeFormat("pt-BR", {
+  return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -95,9 +101,7 @@ function formatarDataLocal(valor) {
     minute: "2-digit",
     hour12: false,
     timeZone: "America/Sao_Paulo",
-  });
-
-  return formatter.format(data);
+  }).format(data);
 }
 
 /**
@@ -330,6 +334,8 @@ export default function Vendas() {
   // estoque do produto selecionado
   const [estoqueAtual, setEstoqueAtual] = useState(null);
   const [estoqueLoading, setEstoqueLoading] = useState(false);
+  const [precoProduto, setPrecoProduto] = useState(null);
+  const [precoLoading, setPrecoLoading] = useState(false);
 
   const hoje = new Date().toISOString().slice(0, 10);
   const [pagamentos, setPagamentos] = useState([
@@ -374,11 +380,55 @@ export default function Vendas() {
     setQuantidade(parsed);
   };
 
+  useEffect(() => {
+    let ativo = true;
+
+    if (!produto) {
+      setPrecoProduto(null);
+      setPrecoLoading(false);
+      return () => {
+        ativo = false;
+      };
+    }
+
+    const precoLocal = extrairPrecoAtivoLocal(produto);
+    if (Number.isFinite(precoLocal) && precoLocal > 0) {
+      setPrecoProduto(precoLocal);
+      setPrecoLoading(false);
+      return () => {
+        ativo = false;
+      };
+    }
+
+    setPrecoProduto(null);
+    setPrecoLoading(true);
+
+    (async () => {
+      try {
+        const precoRemoto = await buscarPrecoAtivoRemoto(produto.id);
+        if (ativo) {
+          setPrecoProduto(
+            Number.isFinite(precoRemoto) && precoRemoto > 0 ? precoRemoto : null
+          );
+        }
+      } finally {
+        if (ativo) {
+          setPrecoLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [produto]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---------- historico ----------
-  const carregarVendas = useCallback(async () => {
+  const carregarVendas = useCallback(async (pageOverride = null) => {
+    const pageToLoad = Math.max(pageOverride ?? historicoPage, 1);
     setHistoricoLoading(true);
     try {
-      const skip = (historicoPage - 1) * HISTORICO_PAGE_SIZE;
+      const skip = (pageToLoad - 1) * HISTORICO_PAGE_SIZE;
       const limit = HISTORICO_PAGE_SIZE + 1;
       const resp = await api.get('/vendas', { params: { skip, limit } });
       const data = Array.isArray(resp.data) ? resp.data : resp.data?.items || [];
@@ -475,7 +525,15 @@ export default function Vendas() {
     const permiteDecimalProduto = p?.unidade_medida?.permite_decimal !== false;
     const unidadeSigla = p?.unidade_medida?.sigla || "un.";
 
-    let precoAtivo = extrairPrecoAtivoLocal(p);
+    const precoSelecionado =
+      produto &&
+      produto.id === p.id &&
+      Number.isFinite(precoProduto) &&
+      precoProduto > 0
+        ? precoProduto
+        : null;
+
+    let precoAtivo = precoSelecionado ?? extrairPrecoAtivoLocal(p);
 
     if (!Number.isFinite(precoAtivo) || precoAtivo <= 0) {
       const precoRemoto = await buscarPrecoAtivoRemoto(p.id);
@@ -534,6 +592,8 @@ export default function Vendas() {
 
     setProduto(null);
     setEstoqueAtual(null);
+    setPrecoProduto(null);
+    setPrecoLoading(false);
     setQuantidade(1);
   }
 
@@ -733,13 +793,34 @@ export default function Vendas() {
                 extraParams={{ somente_ativos: true }}
                 formatOption={(p) => `${p.codigo_produto ? p.codigo_produto + " - " : ''}${p.nome}`}
                 onSelect={async (p) => {
+                  const precoLocal = extrairPrecoAtivoLocal(p);
+                  if (Number.isFinite(precoLocal) && precoLocal > 0) {
+                    setPrecoProduto(precoLocal);
+                    setPrecoLoading(false);
+                  } else {
+                    setPrecoProduto(null);
+                    setPrecoLoading(true);
+                  }
                   setProduto(p);
                   setQuantidade(1);
                   await carregarEstoque(p.id);
                 }}
                 clearOnSelect={true}
                 rightSlot={
-                  <>
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-[96px] text-right">
+                      {precoLoading ? (
+                        <span className="text-xs text-gray-500">Carregando...</span>
+                      ) : Number.isFinite(precoProduto) ? (
+                        <span className="text-sm font-semibold text-gray-700">
+                          R$ {Number(precoProduto).toFixed(2)}
+                        </span>
+                      ) : produto ? (
+                        <span className="text-xs text-red-500">Sem preco</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">--</span>
+                      )}
+                    </div>
                     <input
                       type="number"
                       className="w-24 text-sm p-2 border border-gray-300 rounded-lg"
@@ -755,7 +836,7 @@ export default function Vendas() {
                     >
                       Adicionar
                     </button>
-                  </>
+                  </div>
                 }
               />
 
@@ -781,7 +862,15 @@ export default function Vendas() {
                         {produto.nome}
                       </strong>
                     </div>
-                    <button className="text-xs text-blue-600 hover:underline" onClick={() => { setProduto(null); setEstoqueAtual(null); }}>
+                    <button
+                      className="text-xs text-blue-600 hover:underline"
+                      onClick={() => {
+                        setProduto(null);
+                        setEstoqueAtual(null);
+                        setPrecoProduto(null);
+                        setPrecoLoading(false);
+                      }}
+                    >
                       Trocar
                     </button>
                   </div>
@@ -800,6 +889,20 @@ export default function Vendas() {
                       </>
                     ) : (
                       <span className="text-gray-500">Saldo nao disponivel</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-700">
+                    {precoLoading ? (
+                      <span className="text-gray-500">Consultando preco...</span>
+                    ) : Number.isFinite(precoProduto) ? (
+                      <span>
+                        Preco unitario:{' '}
+                        <strong>R$ {Number(precoProduto).toFixed(2)}</strong>
+                      </span>
+                    ) : (
+                      <span className="text-gray-500">
+                        Preco nao disponivel para este produto.
+                      </span>
                     )}
                   </div>
                 </div>
@@ -931,10 +1034,8 @@ export default function Vendas() {
                     setPagamentos([
                       { forma_pagamento: 'dinheiro', valor: '0.00', parcelas: 1, data_vencimento: hoje },
                     ]);
-                    setHistoricoPage((prev) => (prev === 1 ? prev : 1));
-                    if (historicoPage === 1) {
-                      carregarVendas();
-                    }
+                    setHistoricoPage(1);
+                    await carregarVendas(1);
                   } catch (err) {
                     setMensagem({
                       texto: err?.response?.data?.detail || 'Erro ao salvar venda',
