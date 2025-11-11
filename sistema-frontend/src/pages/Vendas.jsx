@@ -104,6 +104,10 @@ function formatarDataLocal(valor) {
   }).format(data);
 }
 
+const formatCurrencyBRL = (valor) =>
+  Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor || 0));
+const formatIntegerBR = (valor) => Intl.NumberFormat("pt-BR").format(Number(valor || 0));
+
 /**
  * Componente de busca assincrona (typeahead) para ENTIDADE (clientes/produtos)
  * Props principais:
@@ -124,6 +128,9 @@ function AsyncSearchBox({
   initialValue = "",
   rightSlot = null,
   clearOnSelect = true,
+  suggestions = [],
+  suggestionsLabel = "",
+  suggestionsLoading = false,
 }) {
   const [term, setTerm] = useState(initialValue);
   const debounced = useDebouncedValue(term, 300);
@@ -134,8 +141,14 @@ function AsyncSearchBox({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const [focused, setFocused] = useState(false);
   const listRef = useRef(null);
   const blurTimer = useRef(null);
+  const trimmedTerm = term.trim();
+  const showSuggestions = trimmedTerm.length < minLen;
+  const displayItems = showSuggestions ? suggestions : results;
+  const displayingLoading = showSuggestions ? suggestionsLoading : loading;
+  const canPaginate = !showSuggestions && hasMore;
 
   const fetchResults = useCallback(
     async (reset = false) => {
@@ -143,7 +156,6 @@ function AsyncSearchBox({
       if (q.length < minLen) {
         setResults([]);
         setHasMore(false);
-        setOpen(false);
         return;
       }
       setLoading(true);
@@ -162,11 +174,12 @@ function AsyncSearchBox({
           null;
 
         const items = Array.isArray(r.data) ? r.data : r.data?.items || [];
-        setResults((prev) => (reset ? items : [...prev, ...items]));
-
-        const total = hdrTotal ?? (reset ? items.length : results.length + items.length);
-        const fetched = reset ? items.length : results.length + items.length;
-        setHasMore(total > fetched);
+        setResults((prev) => {
+          const next = reset ? items : [...prev, ...items];
+          const total = hdrTotal ?? next.length;
+          setHasMore(total > next.length);
+          return next;
+        });
 
         setOpen(true);
       } catch {
@@ -178,7 +191,7 @@ function AsyncSearchBox({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debounced, page, entity, extraParams]
+    [debounced, page, entity, extraParams, minLen]
   );
 
   useEffect(() => {
@@ -193,33 +206,59 @@ function AsyncSearchBox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
+  useEffect(() => {
+    if (page > 1) fetchResults(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [showSuggestions, displayItems.length]);
+
+  useEffect(() => {
+    if (focused && showSuggestions && (suggestions.length > 0 || suggestionsLoading)) {
+      setOpen(true);
+    }
+  }, [focused, showSuggestions, suggestions, suggestionsLoading]);
+
+  useEffect(() => {
+    if (focused && !showSuggestions && results.length > 0) {
+      setOpen(true);
+    }
+  }, [focused, showSuggestions, results]);
+
   const clearAll = () => {
     setTerm("");
     setResults([]);
     setOpen(false);
     setPage(1);
     setHighlight(0);
+    setHasMore(false);
   };
 
-  const handleSelect = (item) => {
-    onSelect(item);
-    if (clearOnSelect) {
-      clearAll();
-    } else {
-      setOpen(false);
+  const handleSelect = async (item) => {
+    try {
+      await onSelect(item);
+      if (clearOnSelect) {
+        clearAll();
+      } else {
+        setOpen(false);
+      }
+    } catch (error) {
+      console.error("Erro ao selecionar item:", error);
     }
   };
 
   const onKeyDown = (e) => {
     if (!open) {
-      if (e.key === "ArrowDown" && results.length > 0) {
+      if (e.key === "ArrowDown" && displayItems.length > 0) {
         setOpen(true);
       }
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlight((h) => Math.min(h + 1, results.length - 1));
+      setHighlight((h) => Math.min(h + 1, displayItems.length - 1));
       scrollIntoView(highlight + 1);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
@@ -227,7 +266,7 @@ function AsyncSearchBox({
       scrollIntoView(highlight - 1);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const item = results[highlight];
+      const item = displayItems[highlight];
       if (item) handleSelect(item);
     } else if (e.key === "Escape") {
       setOpen(false);
@@ -247,7 +286,14 @@ function AsyncSearchBox({
   };
   const onFocus = () => {
     if (blurTimer.current) clearTimeout(blurTimer.current);
-    if (results.length > 0) setOpen(true);
+    setFocused(true);
+    if (displayItems.length > 0 || (showSuggestions && suggestionsLoading)) {
+      setOpen(true);
+    }
+  };
+  const onInputBlur = () => {
+    setFocused(false);
+    onBlur();
   };
 
   return (
@@ -261,7 +307,7 @@ function AsyncSearchBox({
             value={term}
             onChange={(e) => setTerm(e.target.value)}
             onKeyDown={onKeyDown}
-            onBlur={onBlur}
+            onBlur={onInputBlur}
             onFocus={onFocus}
           />
           {term && (
@@ -282,10 +328,22 @@ function AsyncSearchBox({
       {open && (
         <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow max-h-64 overflow-auto">
           <ul ref={listRef}>
-            {results.length === 0 && !loading && (
-              <li className="px-3 py-2 text-xs text-gray-500">Nenhum resultado</li>
+            {showSuggestions && suggestionsLabel && suggestions.length > 0 && (
+              <li className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-100">
+                {suggestionsLabel}
+              </li>
             )}
-            {results.map((it, idx) => (
+            {displayingLoading && displayItems.length === 0 && (
+              <li className="px-3 py-2 text-xs text-gray-500">
+                {showSuggestions ? "Carregando favoritos..." : "Carregando..."}
+              </li>
+            )}
+            {!displayingLoading && displayItems.length === 0 && (
+              <li className="px-3 py-2 text-xs text-gray-500">
+                {showSuggestions ? "Nenhum destaque disponivel" : "Nenhum resultado"}
+              </li>
+            )}
+            {displayItems.map((it, idx) => (
               <li
                 key={it.id}
                 onMouseDown={() => handleSelect(it)}
@@ -297,7 +355,7 @@ function AsyncSearchBox({
                 {formatOption(it)}
               </li>
             ))}
-            {hasMore && (
+            {canPaginate && (
               <li className="px-3 py-2 text-center">
                 <button
                   onMouseDown={(e) => e.preventDefault()}
@@ -346,6 +404,10 @@ export default function Vendas() {
   const [observacao, setObservacao] = useState("");
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState({ texto: "", tipo: "" });
+  const [clientesSugestoes, setClientesSugestoes] = useState([]);
+  const [produtosSugestoes, setProdutosSugestoes] = useState([]);
+  const [clientesSugestoesLoading, setClientesSugestoesLoading] = useState(false);
+  const [produtosSugestoesLoading, setProdutosSugestoesLoading] = useState(false);
 
   const permiteDecimal = produto?.unidade_medida?.permite_decimal !== false;
   const unidadeSiglaAtual = produto?.unidade_medida?.sigla || "un.";
@@ -358,6 +420,93 @@ export default function Vendas() {
     }
     return Math.round(numero).toString();
   };
+
+  useEffect(() => {
+    let ativo = true;
+    const hoje = new Date();
+    const fim = hoje.toISOString().slice(0, 10);
+    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
+
+    const carregarClientesFavoritos = async () => {
+      setClientesSugestoesLoading(true);
+      try {
+        const { data } = await api.get("/relatorios/ranking-clientes", { params: { inicio, fim, limit: 8 } });
+        if (!ativo) return;
+        const lista = Array.isArray(data) ? data : [];
+        setClientesSugestoes(
+          lista
+            .filter((item) => item?.cliente_id && item?.cliente)
+            .map((item) => {
+              const compras = Number(item.qtd_compras || 0);
+              const total = Number(item.total_gasto || 0);
+              const detalhes = [];
+              if (compras > 0) {
+                detalhes.push(`${formatIntegerBR(compras)} compra${compras > 1 ? "s" : ""}`);
+              }
+              if (total > 0) {
+                detalhes.push(formatCurrencyBRL(total));
+              }
+              return {
+                id: item.cliente_id,
+                nome: item.cliente,
+                __fromSuggestion: true,
+                __suggestionInfo: detalhes.join(" • "),
+              };
+            })
+        );
+      } catch (error) {
+        console.warn("Nao foi possivel carregar clientes frequentes:", error);
+        if (ativo) setClientesSugestoes([]);
+      } finally {
+        if (ativo) setClientesSugestoesLoading(false);
+      }
+    };
+
+    const carregarProdutosFavoritos = async () => {
+      setProdutosSugestoesLoading(true);
+      try {
+        const { data } = await api.get("/relatorios/produtos-mais-vendidos", {
+          params: { inicio, fim, limit: 8 },
+        });
+        if (!ativo) return;
+        const lista = Array.isArray(data) ? data : [];
+        setProdutosSugestoes(
+          lista
+            .filter((item) => item?.produto_id && item?.produto)
+            .map((item) => {
+              const quantidade = Number(item.quantidade || 0);
+              const faturamento = Number(item.faturamento || 0);
+              const detalhes = [];
+              if (quantidade > 0) {
+                detalhes.push(`${formatIntegerBR(quantidade)} vend.`);
+              }
+              if (faturamento > 0) {
+                detalhes.push(formatCurrencyBRL(faturamento));
+              }
+              return {
+                id: item.produto_id,
+                nome: item.produto,
+                codigo_produto: item.codigo,
+                __fromSuggestion: true,
+                __suggestionInfo: detalhes.join(" • "),
+              };
+            })
+        );
+      } catch (error) {
+        console.warn("Nao foi possivel carregar produtos em destaque:", error);
+        if (ativo) setProdutosSugestoes([]);
+      } finally {
+        if (ativo) setProdutosSugestoesLoading(false);
+      }
+    };
+
+    carregarClientesFavoritos();
+    carregarProdutosFavoritos();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   const handleQuantidadeChange = (valor) => {
     const normalizado = String(valor).replace(",", ".");
@@ -756,14 +905,35 @@ export default function Vendas() {
                   entity="clientes"
                   placeholder="Digite 2+ letras ou o codigo do cliente..."
                   minLen={2}
-                  formatOption={(c) =>
-                    `${c.codigo_cliente ? c.codigo_cliente + " - " : ""}${c.nome}${
-                      c.cpf_cnpj ? " (" + c.cpf_cnpj + ")" : ""
-                    }`
-                  }
-                  onSelect={(cli) => setCliente(cli)}
-                  clearOnSelect={true}
+                  formatOption={(c) => (
+                    <div className="flex flex-col">
+                      <span>
+                        {c.codigo_cliente ? `${c.codigo_cliente} - ` : ""}
+                        {c.nome}
+                        {c.cpf_cnpj ? ` (${c.cpf_cnpj})` : ""}
+                      </span>
+                      {c.__suggestionInfo && (
+                        <span className="text-xs text-gray-500">{c.__suggestionInfo}</span>
+                      )}
+                    </div>
+                  )}
+                  onSelect={async (cli) => {
+                    if (cli?.__fromSuggestion) {
+                      try {
+                        const { data } = await api.get(`/clientes/${cli.id}`);
+                        setCliente(data || cli);
+                        return;
+                      } catch (error) {
+                        console.warn("Nao foi possivel detalhar o cliente sugerido:", error);
+                      }
+                    }
+                    setCliente(cli);
+                  }}
+                  clearOnSelect
                   rightSlot={null}
+                  suggestions={clientesSugestoes}
+                  suggestionsLabel="Clientes frequentes"
+                  suggestionsLoading={clientesSugestoesLoading}
                 />
               ) : (
                 <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-sm">
@@ -791,9 +961,30 @@ export default function Vendas() {
                 placeholder="Digite 2+ letras do produto ou codigo..."
                 minLen={2}
                 extraParams={{ somente_ativos: true }}
-                formatOption={(p) => `${p.codigo_produto ? p.codigo_produto + " - " : ''}${p.nome}`}
+                formatOption={(p) => (
+                  <div className="flex flex-col">
+                    <span>
+                      {p.codigo_produto ? `${p.codigo_produto} - ` : ""}
+                      {p.nome}
+                    </span>
+                    {p.__suggestionInfo && (
+                      <span className="text-xs text-gray-500">{p.__suggestionInfo}</span>
+                    )}
+                  </div>
+                )}
                 onSelect={async (p) => {
-                  const precoLocal = extrairPrecoAtivoLocal(p);
+                  let selecionado = p;
+                  if (p?.__fromSuggestion) {
+                    try {
+                      const { data } = await api.get(`/produtos/${p.id}`);
+                      if (data?.id) {
+                        selecionado = data;
+                      }
+                    } catch (error) {
+                      console.warn("Nao foi possivel detalhar o produto sugerido:", error);
+                    }
+                  }
+                  const precoLocal = extrairPrecoAtivoLocal(selecionado);
                   if (Number.isFinite(precoLocal) && precoLocal > 0) {
                     setPrecoProduto(precoLocal);
                     setPrecoLoading(false);
@@ -801,11 +992,11 @@ export default function Vendas() {
                     setPrecoProduto(null);
                     setPrecoLoading(true);
                   }
-                  setProduto(p);
+                  setProduto(selecionado);
                   setQuantidade(1);
-                  await carregarEstoque(p.id);
+                  await carregarEstoque(selecionado.id);
                 }}
-                clearOnSelect={true}
+                clearOnSelect
                 rightSlot={
                   <div className="flex items-center gap-2">
                     <div className="min-w-[96px] text-right">
@@ -838,6 +1029,9 @@ export default function Vendas() {
                     </button>
                   </div>
                 }
+                suggestions={produtosSugestoes}
+                suggestionsLabel="Produtos em destaque"
+                suggestionsLoading={produtosSugestoesLoading}
               />
 
               <input

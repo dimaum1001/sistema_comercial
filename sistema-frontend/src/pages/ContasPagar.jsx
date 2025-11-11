@@ -519,6 +519,17 @@ export default function ContasPagar() {
     setTabelaPage((prev) => Math.min(totalPaginas, prev + 1));
   };
 
+  const resetFiltros = () => {
+    setFiltroStatus("todas");
+    setFornecedorFiltro("");
+    setFornecedorFiltroNome("");
+    setPeriodo({ inicio: primeiroDia, fim: ultimoDia });
+  };
+
+  const limparNovaConta = () => {
+    setNovaConta({ fornecedorId: "", fornecedorNome: "", descricao: "", valor: "", dataVencimento: ultimoDia });
+  };
+
   const StatusBadge = ({ status }) => {
     const s = (status || "pendente").toLowerCase();
     const cls =
@@ -567,124 +578,157 @@ export default function ContasPagar() {
           </Card>
         </div>
 
-        <Card padding="p-3">
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Status</label>
-              <select
-                className="w-full p-2 border rounded text-sm"
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Card padding="p-5" className="space-y-4 h-full">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Filtrar contas</p>
+                <p className="text-xs text-gray-500">Combine status, fornecedor e período para refinar a lista.</p>
+              </div>
+              <button
+                onClick={resetFiltros}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition"
+                type="button"
               >
-                <option value="todas">Todas</option>
-                <option value="pendente">Pendente</option>
-                <option value="paga">Paga</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs text-gray-600 mb-1">Fornecedor</label>
-              <FornecedorSearchBox
-                placeholder="Buscar ou selecionar fornecedor"
-                initialValue={fornecedorFiltroNome}
-                minLen={1}
-                clearOnSelect={false}
-                onSelect={(item) => {
-                  if (item) {
-                    setFornecedorFiltro(item.id);
-                    setFornecedorFiltroNome(formatFornecedorLabel(item));
-                    upsertFornecedor(item);
-                  } else {
-                    setFornecedorFiltro('');
-                    setFornecedorFiltroNome('');
-                  }
-                }}
-                onClear={() => {
-                  setFornecedorFiltro('');
-                  setFornecedorFiltroNome('');
-                }}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Inicio</label>
-              <input
-                type="date"
-                className="w-full p-2 border rounded text-sm"
-                value={periodo.inicio}
-                onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Fim</label>
-              <input
-                type="date"
-                className="w-full p-2 border rounded text-sm"
-                value={periodo.fim}
-                onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))}
-              />
-            </div>
-          </div>
-        </Card>
-
-        <Card padding="p-3">
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-5 items-end">
-            <div className="md:col-span-2">
-              <label className="block text-xs text-gray-600 mb-1">Fornecedor</label>
-              <FornecedorSearchBox
-                placeholder="Buscar fornecedor (opcional)"
-                initialValue={novaConta.fornecedorNome}
-                minLen={1}
-                clearOnSelect={false}
-                onSelect={(item) => {
-                  if (item) {
-                    setNovaConta((s) => ({ ...s, fornecedorId: item.id, fornecedorNome: formatFornecedorLabel(item) }));
-                    upsertFornecedor(item);
-                  } else {
-                    setNovaConta((s) => ({ ...s, fornecedorId: '', fornecedorNome: '' }));
-                  }
-                }}
-                onClear={() => setNovaConta((s) => ({ ...s, fornecedorId: '', fornecedorNome: '' }))}
-              />
-              <p className="mt-1 text-xs text-gray-500">Deixe vazio para conta avulsa.</p>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Valor (R$)</label>
-              <input
-                type="text"
-                name="valor"
-                value={novaConta.valor}
-                onChange={handleChange}
-                placeholder="0,00"
-                className="w-full p-2 border rounded text-sm text-right"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Vencimento</label>
-              <input
-                type="date"
-                name="dataVencimento"
-                value={novaConta.dataVencimento}
-                onChange={handleChange}
-                className="w-full p-2 border rounded text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Descricao</label>
-              <input
-                type="text"
-                name="descricao"
-                value={novaConta.descricao}
-                onChange={handleChange}
-                placeholder="Ex.: Energia, Internet..."
-                className="w-full p-2 border rounded text-sm"
-              />
-            </div>
-            <div className="md:col-span-5 flex justify-end">
-              <button onClick={criarConta} className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
-                Criar conta
+                Limpar filtros
               </button>
             </div>
-          </div>
-        </Card>
+            <div className="grid gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600 uppercase">Status</label>
+                <select
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+                  value={filtroStatus}
+                  onChange={(e) => setFiltroStatus(e.target.value)}
+                >
+                  <option value="todas">Todas</option>
+                  <option value="pendente">Pendente</option>
+                  <option value="paga">Paga</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600 uppercase">Fornecedor</label>
+                <FornecedorSearchBox
+                  placeholder="Buscar ou selecionar fornecedor"
+                  initialValue={fornecedorFiltroNome}
+                  minLen={1}
+                  clearOnSelect={false}
+                  onSelect={(item) => {
+                    if (item) {
+                      setFornecedorFiltro(item.id);
+                      setFornecedorFiltroNome(formatFornecedorLabel(item));
+                      upsertFornecedor(item);
+                    } else {
+                      setFornecedorFiltro('');
+                      setFornecedorFiltroNome('');
+                    }
+                  }}
+                  onClear={() => {
+                    setFornecedorFiltro('');
+                    setFornecedorFiltroNome('');
+                  }}
+                />
+                <p className="text-[11px] text-gray-500">Deixe vazio para visualizar todos.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600 uppercase">Periodo</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <input
+                    type="date"
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
+                    value={periodo.inicio}
+                    onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))}
+                  />
+                  <input
+                    type="date"
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm"
+                    value={periodo.fim}
+                    onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card padding="p-5" className="space-y-4 h-full">
+            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Nova conta</p>
+                <p className="text-xs text-gray-500">Cadastre rapidamente um lançamento avulso.</p>
+              </div>
+              <button
+                onClick={limparNovaConta}
+                type="button"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition"
+              >
+                Limpar campos
+              </button>
+            </div>
+            <div className="grid gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600 uppercase">Fornecedor</label>
+                <FornecedorSearchBox
+                  placeholder="Buscar fornecedor (opcional)"
+                  initialValue={novaConta.fornecedorNome}
+                  minLen={1}
+                  clearOnSelect={false}
+                  onSelect={(item) => {
+                    if (item) {
+                      setNovaConta((s) => ({ ...s, fornecedorId: item.id, fornecedorNome: formatFornecedorLabel(item) }));
+                      upsertFornecedor(item);
+                    } else {
+                      setNovaConta((s) => ({ ...s, fornecedorId: '', fornecedorNome: '' }));
+                    }
+                  }}
+                  onClear={() => setNovaConta((s) => ({ ...s, fornecedorId: '', fornecedorNome: '' }))}
+                />
+                <p className="text-[11px] text-gray-500">Deixe vazio para contas sem fornecedor.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600 uppercase">Descricao</label>
+                <input
+                  type="text"
+                  name="descricao"
+                  value={novaConta.descricao}
+                  onChange={handleChange}
+                  placeholder="Ex.: Energia, Internet..."
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-gray-600 uppercase">Valor (R$)</label>
+                  <input
+                    type="text"
+                    name="valor"
+                    value={novaConta.valor}
+                    onChange={handleChange}
+                    placeholder="0,00"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-right"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-gray-600 uppercase">Vencimento</label>
+                  <input
+                    type="date"
+                    name="dataVencimento"
+                    value={novaConta.dataVencimento}
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={criarConta}
+                  className="w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 md:w-auto"
+                >
+                  Criar conta
+                </button>
+              </div>
+            </div>
+          </Card>
+        </div>
 
         <Card padding="p-0">
           <div className="overflow-x-auto">
