@@ -79,6 +79,7 @@ from app.models.models import Venda, VendaItem, Produto, Pagamento, PrecoProduto
 
 
 from app.schemas.venda_schema import VendaCreate, VendaResponse
+from app.core.timezone import now_brasilia_naive
 
 
 
@@ -202,7 +203,8 @@ def criar_venda(payload: VendaCreate, db: Session = Depends(get_db)) -> Venda:
 
 
 
-        data_venda_local = datetime.now()
+        # Usa horario de Brasilia, independente do fuso do servidor (Render).
+        data_venda_local = now_brasilia_naive()
 
 
 
@@ -919,6 +921,5 @@ def listar_vendas(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
 
 
     return vendas
-
 
 
