@@ -800,7 +800,8 @@ export default function Vendas() {
   }
 
   function atualizarPagamento(index, campo, valor) {
-    userEditouPagamentos.current = true;
+    // Somente travar o ajuste automatico quando o usuario editar o VALOR do pagamento principal.
+    if (campo === "valor" && index === 0) userEditouPagamentos.current = true;
     setPagamentos((prev) => {
       const novos = [...prev];
       if (campo === "valor") {
@@ -816,7 +817,6 @@ export default function Vendas() {
   }
 
   function adicionarPagamento() {
-    userEditouPagamentos.current = true;
     setPagamentos((prev) => {
       const pagoCents = prev.reduce((s, p) => s + toCents(p.valor), 0);
       const faltandoCents = Math.max(totalFinalCents - pagoCents, 0);
@@ -1451,7 +1451,8 @@ function PagamentosEditor({
   }
 
   function atualizarPagamento(index, campo, valor) {
-    userEditouPagamentos.current = true;
+    // Somente travar o ajuste automatico quando o usuario editar o VALOR do pagamento principal.
+    if (campo === "valor" && index === 0) userEditouPagamentos.current = true;
     setPagamentos((prev) => {
       const novos = [...prev];
       if (campo === "valor") {
@@ -1467,7 +1468,6 @@ function PagamentosEditor({
   }
 
   function adicionarPagamento() {
-    userEditouPagamentos.current = true;
     setPagamentos((prev) => {
       const pagoCents = prev.reduce((s, p) => s + toCents(p.valor), 0);
       const faltandoCents = Math.max(totalFinalCents - pagoCents, 0);
@@ -1579,7 +1579,6 @@ function PagamentosEditor({
     </div>
   );
 }
-
 
 
 
