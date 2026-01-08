@@ -131,6 +131,10 @@ function AsyncSearchBox({
   suggestions = [],
   suggestionsLabel = "",
   suggestionsLoading = false,
+  inputRef = null,
+  onInputKeyDown = null,
+  onInputFocus = null,
+  onInputBlur = null,
 }) {
   const [term, setTerm] = useState(initialValue);
   const debounced = useDebouncedValue(term, 300);
@@ -249,14 +253,12 @@ function AsyncSearchBox({
     }
   };
 
-  const onKeyDown = (e) => {
+  const handleKeyDown = (e) => {
     if (!open) {
       if (e.key === "ArrowDown" && displayItems.length > 0) {
         setOpen(true);
       }
-      return;
-    }
-    if (e.key === "ArrowDown") {
+    } else if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlight((h) => Math.min(h + 1, displayItems.length - 1));
       scrollIntoView(highlight + 1);
@@ -271,6 +273,9 @@ function AsyncSearchBox({
     } else if (e.key === "Escape") {
       setOpen(false);
     }
+    if (onInputKeyDown && !e.defaultPrevented) {
+      onInputKeyDown(e);
+    }
   };
 
   const scrollIntoView = (idx) => {
@@ -280,20 +285,22 @@ function AsyncSearchBox({
     if (el) el.scrollIntoView({ block: "nearest" });
   };
 
-  const onBlur = () => {
+  const scheduleClose = () => {
     // da tempo de clicar no item da lista
     blurTimer.current = setTimeout(() => setOpen(false), 120);
   };
-  const onFocus = () => {
+  const handleFocus = (e) => {
     if (blurTimer.current) clearTimeout(blurTimer.current);
     setFocused(true);
     if (displayItems.length > 0 || (showSuggestions && suggestionsLoading)) {
       setOpen(true);
     }
+    if (onInputFocus) onInputFocus(e);
   };
-  const onInputBlur = () => {
+  const handleBlur = (e) => {
     setFocused(false);
-    onBlur();
+    scheduleClose();
+    if (onInputBlur) onInputBlur(e);
   };
 
   return (
@@ -306,9 +313,10 @@ function AsyncSearchBox({
             placeholder={placeholder}
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            onKeyDown={onKeyDown}
-            onBlur={onInputBlur}
-            onFocus={onFocus}
+            onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
+            onFocus={handleFocus}
+            ref={inputRef}
           />
           {term && (
             <button
@@ -409,6 +417,15 @@ export default function Vendas() {
   const [clientesSugestoesLoading, setClientesSugestoesLoading] = useState(false);
   const [produtosSugestoesLoading, setProdutosSugestoesLoading] = useState(false);
 
+  const clienteInputRef = useRef(null);
+  const produtoInputRef = useRef(null);
+  const quantidadeInputRef = useRef(null);
+  const codigoInputRef = useRef(null);
+  const observacaoRef = useRef(null);
+  const pagamentoValorRef = useRef(null);
+  const finalizarButtonRef = useRef(null);
+  const ultimaEntradaRef = useRef("codigo");
+
   const permiteDecimal = produto?.unidade_medida?.permite_decimal !== false;
   const unidadeSiglaAtual = produto?.unidade_medida?.sigla || "un.";
 
@@ -420,6 +437,34 @@ export default function Vendas() {
     }
     return Math.round(numero).toString();
   };
+
+  const focusField = useCallback((ref, { select = true } = {}) => {
+    if (!ref?.current) return;
+    ref.current.focus();
+    if (select && typeof ref.current.select === "function") {
+      ref.current.select();
+    }
+  }, []);
+
+  const marcarUltimaEntrada = useCallback((valor) => {
+    ultimaEntradaRef.current = valor;
+  }, []);
+
+  const focarEntradaPrincipal = useCallback(
+    (preferencia = null) => {
+      const alvo = preferencia || ultimaEntradaRef.current;
+      if (alvo === "codigo") {
+        focusField(codigoInputRef);
+      } else {
+        focusField(produtoInputRef);
+      }
+    },
+    [focusField]
+  );
+
+  useEffect(() => {
+    focarEntradaPrincipal("codigo");
+  }, [focarEntradaPrincipal]);
 
   useEffect(() => {
     let ativo = true;
@@ -664,11 +709,11 @@ export default function Vendas() {
   async function adicionarItemComProduto(p) {
     if (!p) {
       setMensagem({ texto: "Selecione um produto", tipo: "erro" });
-      return;
+      return false;
     }
     if (quantidade <= 0) {
       setMensagem({ texto: "Quantidade invalida", tipo: "erro" });
-      return;
+      return false;
     }
 
     const permiteDecimalProduto = p?.unidade_medida?.permite_decimal !== false;
@@ -696,7 +741,7 @@ export default function Vendas() {
         texto: "Produto sem preco ativo. Cadastre ou ative um preco antes de prosseguir.",
         tipo: "erro",
       });
-      return;
+      return false;
     }
 
     const reservado = itens
@@ -714,7 +759,7 @@ export default function Vendas() {
           )} ${unidadeSigla}.`,
           tipo: "erro",
         });
-        return;
+        return false;
       }
     }
 
@@ -724,7 +769,7 @@ export default function Vendas() {
 
     if (quantidadeFinal <= 0) {
       setMensagem({ texto: "Quantidade invalida", tipo: "erro" });
-      return;
+      return false;
     }
 
     setItens((prev) => [
@@ -744,13 +789,23 @@ export default function Vendas() {
     setPrecoProduto(null);
     setPrecoLoading(false);
     setQuantidade(1);
+    return true;
   }
+
+  const handleAdicionarProduto = async (produtoSelecionado) => {
+    const ok = await adicionarItemComProduto(produtoSelecionado);
+    if (ok) {
+      focarEntradaPrincipal();
+    }
+    return ok;
+  };
 
   // atalho: codigo/codigo de barras + Enter
   const onSubmitCodigoProduto = async (raw) => {
     const t = raw.trim();
     if (!t) return;
     try {
+      marcarUltimaEntrada("codigo");
       const digits = onlyDigits(t);
       const params = { q: digits || t, page: 1, per_page: 1 };
       const r = await api.get("/produtos", { params });
@@ -758,7 +813,7 @@ export default function Vendas() {
       if (list.length > 0) {
         // carrega estoque do produto e adiciona
         await carregarEstoque(list[0].id);
-        await adicionarItemComProduto(list[0]);
+        await handleAdicionarProduto(list[0]);
       } else {
         setMensagem({ texto: "Produto nao encontrado", tipo: "erro" });
       }
@@ -832,6 +887,9 @@ export default function Vendas() {
   function removerItem(index) {
     setItens((prev) => prev.filter((_, i) => i !== index));
   }
+  const removerUltimoItem = useCallback(() => {
+    setItens((prev) => (prev.length > 0 ? prev.slice(0, -1) : prev));
+  }, [setItens]);
 
   function getStatus(v) {
     if (v?.status && String(v.status).trim()) return v.status;
@@ -866,6 +924,170 @@ export default function Vendas() {
         })()
       : null;
 
+  const finalizarVenda = useCallback(async () => {
+    if (loading) return;
+
+    if (itens.length === 0) {
+      setMensagem({ texto: "Adicione ao menos um item", tipo: "erro" });
+      focarEntradaPrincipal();
+      return;
+    }
+
+    const totalPagamentosCents = pagamentos.reduce((sum, p) => sum + toCents(p.valor), 0);
+
+    if (totalPagamentosCents > totalFinalCents) {
+      setMensagem({
+        texto: "Pagamentos excedem o total da venda.",
+        tipo: "erro",
+      });
+      focusField(pagamentoValorRef);
+      return;
+    }
+
+    let status = "pendente";
+    const restanteCents = totalFinalCents - totalPagamentosCents;
+    if (restanteCents <= 0) status = "pago";
+    else if (totalPagamentosCents > 0 && restanteCents > 0) status = "pago parcial";
+
+    setLoading(true);
+    try {
+      await api.post("/vendas", {
+        cliente_id: cliente?.id || null,
+        desconto: fromCents(descontoCents),
+        acrescimo: fromCents(acrescimoCents),
+        observacao,
+        status,
+        itens: itens.map((item) => ({
+          produto_id: item.produto_id,
+          quantidade: item.quantidade,
+          preco_unit: fromCents(toCents(item.preco_unit)),
+        })),
+        pagamentos: pagamentos.map((p) => ({
+          forma_pagamento: p.forma_pagamento,
+          valor: fromCents(toCents(p.valor)),
+          data_vencimento: p.data_vencimento || null,
+          parcela_numero: p.parcela_numero || null,
+          parcela_total: p.parcela_total || null,
+        })),
+      });
+
+      setMensagem({ texto: "Venda registrada com sucesso!", tipo: "sucesso" });
+      setCliente(null);
+      setProduto(null);
+      setEstoqueAtual(null);
+      setItens([]);
+      setDescontoPerc(0);
+      setAcrescimoPerc(0);
+      setObservacao("");
+      userEditouPagamentos.current = false;
+      setPagamentos([
+        { forma_pagamento: "dinheiro", valor: "0.00", parcelas: 1, data_vencimento: hoje },
+      ]);
+      setHistoricoPage(1);
+      await carregarVendas(1);
+      focarEntradaPrincipal();
+    } catch (err) {
+      setMensagem({
+        texto: err?.response?.data?.detail || "Erro ao salvar venda",
+        tipo: "erro",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    loading,
+    itens,
+    pagamentos,
+    totalFinalCents,
+    descontoCents,
+    acrescimoCents,
+    cliente,
+    observacao,
+    hoje,
+    carregarVendas,
+    focusField,
+    focarEntradaPrincipal,
+  ]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.defaultPrevented) return;
+
+      const target = e.target;
+      const tag = target?.tagName?.toLowerCase();
+      const isEditable =
+        target?.isContentEditable || tag === "input" || tag === "textarea" || tag === "select";
+
+      if (e.ctrlKey && e.key === "Enter") {
+        e.preventDefault();
+        finalizarVenda();
+        return;
+      }
+
+      if (e.altKey && !e.shiftKey && !e.ctrlKey) {
+        const key = e.key.toLowerCase();
+
+        if (key === "backspace" && !isEditable) {
+          e.preventDefault();
+          removerUltimoItem();
+          return;
+        }
+
+        if (key === "1") {
+          e.preventDefault();
+          if (cliente) {
+            setCliente(null);
+            setTimeout(() => focusField(clienteInputRef), 0);
+          } else {
+            focusField(clienteInputRef);
+          }
+          return;
+        }
+
+        if (key === "2") {
+          e.preventDefault();
+          marcarUltimaEntrada("produto");
+          focusField(produtoInputRef);
+          return;
+        }
+
+        if (key === "3") {
+          e.preventDefault();
+          marcarUltimaEntrada("produto");
+          focusField(quantidadeInputRef);
+          return;
+        }
+
+        if (key === "4") {
+          e.preventDefault();
+          marcarUltimaEntrada("codigo");
+          focusField(codigoInputRef);
+          return;
+        }
+
+        if (key === "5") {
+          e.preventDefault();
+          focusField(pagamentoValorRef);
+          return;
+        }
+
+        if (key === "6") {
+          e.preventDefault();
+          focusField(observacaoRef, { select: false });
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [
+    cliente,
+    finalizarVenda,
+    focusField,
+    marcarUltimaEntrada,
+    removerUltimoItem,
+  ]);
+
   // ---------- UI ----------
   const messageTone =
     mensagem?.tipo === "sucesso"
@@ -892,6 +1114,9 @@ export default function Vendas() {
             <h2 className="text-md font-semibold mb-4 flex items-center">
               <FiPlus className="mr-1" /> Nova Venda
             </h2>
+            <p className="mb-4 text-xs text-gray-500">
+              Atalhos: Alt+1 Cliente | Alt+2 Produto | Alt+3 Qtde | Alt+4 Codigo | Alt+5 Pagamento | Ctrl+Enter Finalizar | Alt+Backspace Remover ultimo
+            </p>
 
             {/* Cliente */}
             <div className="mb-4">
@@ -918,19 +1143,29 @@ export default function Vendas() {
                     </div>
                   )}
                   onSelect={async (cli) => {
+                    let selecionado = cli;
                     if (cli?.__fromSuggestion) {
                       try {
                         const { data } = await api.get(`/clientes/${cli.id}`);
-                        setCliente(data || cli);
-                        return;
+                        if (data) selecionado = data;
                       } catch (error) {
                         console.warn("Nao foi possivel detalhar o cliente sugerido:", error);
                       }
                     }
-                    setCliente(cli);
+                    setCliente(selecionado);
+                    marcarUltimaEntrada("produto");
+                    focusField(produtoInputRef);
+                  }}
+                  onInputKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.currentTarget.value.trim()) {
+                      e.preventDefault();
+                      marcarUltimaEntrada("produto");
+                      focusField(produtoInputRef);
+                    }
                   }}
                   clearOnSelect
                   rightSlot={null}
+                  inputRef={clienteInputRef}
                   suggestions={clientesSugestoes}
                   suggestionsLabel="Clientes frequentes"
                   suggestionsLoading={clientesSugestoesLoading}
@@ -994,6 +1229,8 @@ export default function Vendas() {
                   }
                   setProduto(selecionado);
                   setQuantidade(1);
+                  marcarUltimaEntrada("produto");
+                  focusField(quantidadeInputRef);
                   await carregarEstoque(selecionado.id);
                 }}
                 clearOnSelect
@@ -1019,16 +1256,28 @@ export default function Vendas() {
                       step={permiteDecimal ? "0.001" : "1"}
                       value={quantidade}
                       onChange={(e) => handleQuantidadeChange(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          await handleAdicionarProduto(produto);
+                        }
+                      }}
+                      onFocus={() => marcarUltimaEntrada("produto")}
+                      ref={quantidadeInputRef}
                       title={permiteDecimal ? "Quantidade (aceita decimais)" : "Quantidade (somente inteiros)"}
                     />
                     <button
+                      type="button"
                       className="bg-blue-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-blue-700"
-                      onClick={async () => { await adicionarItemComProduto(produto); }}
+                      onClick={async () => { await handleAdicionarProduto(produto); }}
+                      title="Adicionar item (Enter na quantidade)"
                     >
                       Adicionar
                     </button>
                   </div>
                 }
+                inputRef={produtoInputRef}
+                onInputFocus={() => marcarUltimaEntrada("produto")}
                 suggestions={produtosSugestoes}
                 suggestionsLabel="Produtos em destaque"
                 suggestionsLoading={produtosSugestoesLoading}
@@ -1038,12 +1287,15 @@ export default function Vendas() {
                 type="text"
                 className="mt-2 w-full text-sm p-2 border border-gray-200 rounded-lg"
                 placeholder="Ou digite/escaneie o CODIGO/CODIGO DE BARRAS e pressione Enter"
+                ref={codigoInputRef}
+                onFocus={() => marcarUltimaEntrada("codigo")}
                 onKeyDown={async (e) => {
                   if (e.key === "Enter") {
                     await onSubmitCodigoProduto(e.currentTarget.value);
                     e.currentTarget.value = "";
                   }
                 }}
+                title="Codigo/Codigo de barras (Alt+4)"
               />
 
               {produto && (
@@ -1134,9 +1386,7 @@ export default function Vendas() {
                           <td className="px-2 py-2 text-right">
                             <button
                               className="text-red-500 hover:text-red-700"
-                              onClick={() =>
-                                setItens((prev) => prev.filter((_, i) => i !== idx))
-                              }
+                              onClick={() => removerItem(idx)}
                               title="Remover"
                             >
                               <FiTrash2 />
@@ -1158,6 +1408,8 @@ export default function Vendas() {
                 placeholder="Anote detalhes relevantes para esta venda"
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
+                ref={observacaoRef}
+                title="Observacoes (Alt+6)"
               />
             </div>
 
@@ -1169,80 +1421,14 @@ export default function Vendas() {
                 pagamentos={pagamentos}
               />
               <button
-                onClick={async () => {
-                  if (itens.length === 0) {
-                    setMensagem({ texto: 'Adicione ao menos um item', tipo: 'erro' });
-                    return;
-                  }
-
-                  const subtotalCents = itens.reduce((sum, item) => sum + subtotalItemToCents(item), 0);
-                  const descontoCents = Math.round(subtotalCents * (Number(descontoPerc) / 100));
-                  const acrescimoCents = Math.round(subtotalCents * (Number(acrescimoPerc) / 100));
-                  const totalFinalCents = subtotalCents - descontoCents + acrescimoCents;
-                  const totalPagamentosCents = pagamentos.reduce((sum, p) => sum + toCents(p.valor), 0);
-
-                  if (totalPagamentosCents > totalFinalCents) {
-                    setMensagem({
-                      texto: 'Pagamentos excedem o total da venda.',
-                      tipo: 'erro',
-                    });
-                    return;
-                  }
-
-                  let status = 'pendente';
-                  const restanteCents = totalFinalCents - totalPagamentosCents;
-                  if (restanteCents <= 0) status = 'pago';
-                  else if (totalPagamentosCents > 0 && restanteCents > 0) status = 'pago parcial';
-
-                  setLoading(true);
-                  try {
-                    await api.post('/vendas', {
-                      cliente_id: cliente?.id || null,
-                      desconto: fromCents(descontoCents),
-                      acrescimo: fromCents(acrescimoCents),
-                      observacao,
-                      status,
-                      itens: itens.map((item) => ({
-                        produto_id: item.produto_id,
-                        quantidade: item.quantidade,
-                        preco_unit: fromCents(toCents(item.preco_unit)),
-                      })),
-                      pagamentos: pagamentos.map((p) => ({
-                        forma_pagamento: p.forma_pagamento,
-                        valor: fromCents(toCents(p.valor)),
-                        data_vencimento: p.data_vencimento || null,
-                        parcela_numero: p.parcela_numero || null,
-                        parcela_total: p.parcela_total || null,
-                      })),
-                    });
-
-                    setMensagem({ texto: 'Venda registrada com sucesso!', tipo: 'sucesso' });
-                    setCliente(null);
-                    setProduto(null);
-                    setEstoqueAtual(null);
-                    setItens([]);
-                    setDescontoPerc(0);
-                    setAcrescimoPerc(0);
-                    setObservacao('');
-                    userEditouPagamentos.current = false;
-                    setPagamentos([
-                      { forma_pagamento: 'dinheiro', valor: '0.00', parcelas: 1, data_vencimento: hoje },
-                    ]);
-                    setHistoricoPage(1);
-                    await carregarVendas(1);
-                  } catch (err) {
-                    setMensagem({
-                      texto: err?.response?.data?.detail || 'Erro ao salvar venda',
-                      tipo: 'erro',
-                    });
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
+                ref={finalizarButtonRef}
+                onClick={finalizarVenda}
                 disabled={loading}
                 className={`flex items-center text-sm px-5 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 ${
                   loading ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
+                title="Finalizar venda (Ctrl+Enter)"
+                aria-keyshortcuts="Ctrl+Enter"
               >
                 {loading ? 'Salvando...' : (<><FiSave className="mr-2" /> Finalizar Venda</>)}
               </button>
@@ -1299,6 +1485,7 @@ export default function Vendas() {
               acrescimoPerc={acrescimoPerc}
               userEditouPagamentos={userEditouPagamentos}
               hoje={hoje}
+              firstValorRef={pagamentoValorRef}
             />
           </Card>
         </div>
@@ -1421,6 +1608,7 @@ function PagamentosEditor({
   acrescimoPerc,
   userEditouPagamentos,
   hoje,
+  firstValorRef = null,
 }) {
   const descontoCents = Math.round(subtotalCents * (Number(descontoPerc) / 100));
   const acrescimoCents = Math.round(subtotalCents * (Number(acrescimoPerc) / 100));
@@ -1536,6 +1724,7 @@ function PagamentosEditor({
                 className="input h-11 text-right"
                 value={p.valor}
                 onChange={(e) => atualizarPagamento(idx, "valor", e.target.value)}
+                ref={idx === 0 ? firstValorRef : null}
               />
             </div>
 
@@ -1579,8 +1768,3 @@ function PagamentosEditor({
     </div>
   );
 }
-
-
-
-
-
