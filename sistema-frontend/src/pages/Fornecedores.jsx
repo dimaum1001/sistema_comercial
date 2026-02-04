@@ -160,7 +160,7 @@ export default function Fornecedores() {
           <select
             value={pageSize}
             onChange={handlePageSizeChange}
-            className="select h-9 w-32 appearance-none rounded-full bg-white px-4 pr-10 text-center font-semibold text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="select h-9 w-32 appearance-none rounded-full bg-white px-4 py-0 pr-10 text-center font-semibold text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
           >
             {[10, 25, 50, 100].map((option) => (
               <option key={option} value={option}>

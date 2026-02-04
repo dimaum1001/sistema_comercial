@@ -10,35 +10,41 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
+  const demoLoginEnabled = String(import.meta.env?.VITE_DEMO_LOGIN_ENABLED || '').toLowerCase() === 'true'
 
-  const handleLogin = async (e) => {
-    e.preventDefault()
+  const finishLogin = (data) => {
+    localStorage.setItem('token', data.access_token)
+    if (data.usuario) {
+      localStorage.setItem('usuario', JSON.stringify(data.usuario))
+    }
+
+    axios.defaults.headers.common.Authorization = `Bearer ${data.access_token}`
+    window.dispatchEvent(new Event('auth-changed'))
+    navigate('/dashboard', { replace: true })
+  }
+
+  const runAuth = async (requestFn) => {
     if (loading) return
     setLoading(true)
     setErro('')
-    
+
     try {
-      const { data } = await axios.post('/auth/login', { email, senha })
-
-      // Salva token/usuário
-      localStorage.setItem('token', data.access_token)
-      if (data.usuario) {
-        localStorage.setItem('usuario', JSON.stringify(data.usuario))
-      }
-
-      // Garante que próximas requisições já vão autenticadas
-      axios.defaults.headers.common.Authorization = `Bearer ${data.access_token}`
-
-      // Notifica a aplicação que o estado de auth mudou (mesma aba)
-      window.dispatchEvent(new Event('auth-changed'))
-
-      // Vai para o dashboard
-      navigate('/dashboard', { replace: true })
+      const { data } = await requestFn()
+      finishLogin(data)
     } catch (err) {
-      setErro(err?.response?.data?.detail || 'Credenciais inválidas. Por favor, tente novamente.')
+      setErro(err?.response?.data?.detail || 'Credenciais invalidas. Por favor, tente novamente.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    await runAuth(() => axios.post('/auth/login', { email, senha }))
+  }
+
+  const handleDemoLogin = async () => {
+    await runAuth(() => axios.post('/auth/demo-login'))
   }
 
   return (
@@ -46,7 +52,7 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Sistema Comercial</h1>
-          <p className="text-gray-600">Gerencie seu negócio de forma eficiente</p>
+          <p className="text-gray-600">Gerencie seu negocio de forma eficiente</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -95,7 +101,7 @@ export default function Login() {
                 </div>
                 <input
                   id="senha"
-                  type={showPassword ? "text" : "password"}
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="Sua senha"
                   className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={senha}
@@ -116,10 +122,7 @@ export default function Login() {
                 </button>
               </div>
               <div className="mt-1 text-right">
-                <Link 
-                  to="/esqueci-senha" 
-                  className="text-sm text-blue-600 hover:underline"
-                >
+                <Link to="/esqueci-senha" className="text-sm text-blue-600 hover:underline">
                   Esqueceu sua senha?
                 </Link>
               </div>
@@ -144,15 +147,27 @@ export default function Login() {
                 'Entrar'
               )}
             </button>
+
+            {demoLoginEnabled && (
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                disabled={loading}
+                className={`w-full flex justify-center items-center py-3 px-4 border rounded-lg shadow-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                  loading
+                    ? 'border-blue-100 bg-blue-50 text-blue-300 cursor-not-allowed'
+                    : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                Entrar com conta de demonstracao
+              </button>
+            )}
           </form>
 
           <div className="px-6 pb-6 text-center">
             <p className="text-sm text-gray-600">
-              Não tem uma conta?{' '}
-              <Link 
-                to="/register" 
-                className="font-medium text-blue-600 hover:text-blue-500 hover:underline"
-              >
+              Nao tem uma conta?{' '}
+              <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500 hover:underline">
                 Cadastre-se agora
               </Link>
             </p>

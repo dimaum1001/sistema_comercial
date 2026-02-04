@@ -6,6 +6,7 @@ from typing import List, Optional
 import os
 
 from app.auth import auth_routes
+from app.auth.demo_account import ensure_demo_account
 from app.core.config import settings
 from app.db.database import ensure_schema_integrity, engine
 from app.middleware.audit import AuditMiddleware
@@ -60,6 +61,7 @@ app.include_router(direitos_titulares_routes.router)
 def testar_conexao_supabase():
     try:
         ensure_schema_integrity()
+        ensure_demo_account()
         with engine.connect() as conn:
             resultado = conn.execute(text("SELECT now()"))
             print("OK. Conectado ao Supabase em", resultado.scalar())

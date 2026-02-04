@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_TTL_HOURS: int = 2
     PASSWORD_RESET_DEV_ECHO_TOKEN: bool = False
 
+    # Conta de demonstracao (opcional)
+    DEMO_ACCOUNT_ENABLED: bool = False
+    DEMO_ACCOUNT_NAME: str = "Conta Demo"
+    DEMO_ACCOUNT_EMAIL: Optional[EmailStr] = None
+    DEMO_ACCOUNT_PASSWORD: Optional[str] = None
+    DEMO_ACCOUNT_TIPO: str = "admin"
+    DEMO_ACCOUNT_SYNC_PASSWORD_ON_START: bool = False
+    DEMO_SEED_DATA_ENABLED: bool = False
+    DEMO_SEED_DATA_ON_LOGIN: bool = True
+
     # DPO / encarregado de dados
     DPO_NAME: str = "Encarregado de Protecao de Dados"
     DPO_EMAIL: EmailStr = Field(default="dpo@example.com")
